@@ -15,47 +15,55 @@ jobs:
 
       - name: Install Mihomo Alpha
         run: |
-          # 核心改动：切换到 Alpha 分支，这个版本的 rule-set 编译功能最稳定
-          # 自动获取最新的 Alpha 版下载地址
-          URL=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/Prerelease-Alpha | grep "browser_download_url.*linux-amd64-alpha-.*\.gz" | head -n 1 | cut -d '"' -f 4)
-          curl -L "$URL" | gunzip > mihomo
+          # 带重试 + 兜底链接，避免 API 限流/链接失效
+          URL=$(curl -s --retry 3 https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/Prerelease-Alpha | grep "browser_download_url.*linux-amd64-alpha-.*\.gz" | head -n 1 | cut -d '"' -f 4)
+          if [ -z "$URL" ]; then
+            URL="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/mihomo-linux-amd64-alpha-v1.18.0.gz"
+          fi
+          curl -L --retry 3 "$URL" | gunzip > mihomo
           chmod +x mihomo
-          ./mihomo -v
+          ./mihomo -v || { echo "Mihomo 安装失败"; exit 1; }
 
       - name: Process and Compile
         run: |
-          # 1. 极速清洗并转换格式
+          # 1. 清洗数据：移除 Windows 换行符、首尾空格、空行
           echo "payload:" > temp_rules.yaml
           tr -d '\r' < OKTV.txt | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' > cleaned.txt
           
-          # 核心转换逻辑
-          grep -E '^(\+|\.)' cleaned.txt | sed 's/^[+.]*//' | sed 's/^/  - DOMAIN-SUFFIX,/' >> temp_rules.yaml
-          grep -vE '^(\+|\.)' cleaned.txt | grep -v ',' | sed 's/^/  - DOMAIN,/' >> temp_rules.yaml
-          grep -vE '^(\+|\.)' cleaned.txt | grep ',' | sed 's/^/  - /' >> temp_rules.yaml
+          # 2. 规则转换（兼容 +/./* 开头，覆盖 DOMAIN-SUFFIX/DOMAIN 类型）
+          grep -E '^[+.*]+' cleaned.txt | sed 's/^[+.*]*//' | sed 's/^/  - DOMAIN-SUFFIX,/' >> temp_rules.yaml
+          grep -vE '^[+.*]+' cleaned.txt | grep -v ',' | sed 's/^/  - DOMAIN,/' >> temp_rules.yaml
+          grep -vE '^[+.*]+' cleaned.txt | grep ',' | sed 's/^/  - /' >> temp_rules.yaml
 
-          # 2. 预览生成的 YAML (确保格式无误)
+          # 3. 校验 YAML 格式（避免编译失败）
+          sudo apt-get update && sudo apt-get install -y yamllint
+          yamllint temp_rules.yaml || { echo "YAML 格式错误"; exit 1; }
+
+          # 4. 预览生成的 YAML（前 10 行）
           echo "--- Generated YAML Preview ---"
           head -n 10 temp_rules.yaml
           echo "------------------------------"
 
-          # 3. 核心修复：使用特殊的命令行标记强制进入编译模式
-          # Alpha 版在处理 rule-set compile 时更加严谨
-          ./mihomo rule-set compile temp_rules.yaml OKTV.mrs
+          # 5. 编译 MRS（兼容新旧参数）
+          ./mihomo rule-set compile --force temp_rules.yaml OKTV.mrs || \
+          ./mihomo ruleset compile temp_rules.yaml OKTV.mrs || { echo "MRS 编译失败"; exit 1; }
 
       - name: Commit and Push
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
+          # 检查 MRS 文件非空，避免空提交
           if [ -s "OKTV.mrs" ]; then
             git add OKTV.mrs
             if git diff --staged --quiet; then
-              echo "No changes."
+              echo "No changes to commit."
+              exit 0
             else
               git commit -m "Auto-update OKTV.mrs [skip ci]"
-              git push
+              git push || { echo "推送失败"; exit 1; }
             fi
           else
-            echo "Error: MRS file generation failed."
+            echo "Error: MRS 文件为空，生成失败."
             exit 1
           fi
