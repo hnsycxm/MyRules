@@ -1,0 +1,25 @@
+name: Auto Compile MRS
+on:
+  push:
+    paths:
+      - 'oktv.txt'
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Mihomo
+        run: |
+          wget https://github.com/MetaCubeX/mihomo/releases/download/v1.18.1/mihomo-linux-amd64-v1.18.1.gz
+          gunzip mihomo-linux-amd64-v1.18.1.gz
+          mv mihomo-linux-amd64-v1.18.1 mihomo && chmod +x mihomo
+      - name: Compile
+        run: ./mihomo ruleset compile --behavior domain oktv.txt oktv.mrs
+      - name: Push
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add oktv.mrs
+          git commit -m "chore: auto-update oktv.mrs" || exit 0
+          git push
