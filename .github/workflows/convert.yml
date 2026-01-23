@@ -1,75 +1,68 @@
-# ==========================================
-# 维护日志区 (时间倒序)
-# [2026-01-24] 修复 124 错误；优化脚本逻辑，支持 +. 或 . 前缀自动转 DOMAIN-SUFFIX。
-# [2026-01-23] 优化域名转换逻辑，支持自动识别并补全 DOMAIN 类型。
-# [2026-01-22] 初始化自动转换工作流，实现 TXT 转 MRS。
-# ==========================================
-
 name: Convert TXT to MRS
 
 on:
   push:
     paths:
-      - 'OKTV.txt' # 仅在 OKTV.txt 修改时触发工作流
-  workflow_dispatch: # 允许手动点击触发
+      - 'OKTV.txt' # 仅在 OKTV.txt 变动时触发
+  workflow_dispatch: # 支持手动触发
 
 jobs:
   convert:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4 # 检出仓库代码内容
+        uses: actions/checkout@v4
 
       - name: Install Mihomo
         run: |
-          # 下载 v1.18.8 稳定版，直接解压并重命名以确保路径唯一性
-          curl -L -o mihomo.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.18.8/mihomo-linux-amd64-v1.18.8.gz # 下载内核
-          gunzip -f mihomo.gz # 强制解压二进制文件
-          mv mihomo-linux-amd64-v1.18.8 mihomo_tool # 重命名为统一工具名
-          chmod +x mihomo_tool # 赋予可执行权限
-          ./mihomo_tool -v # 验证工具版本，确保环境正常
+          # 核心修复：直接将解压流重定向到目标文件名，避免文件名匹配失败
+          curl -L https://github.com/MetaCubeX/mihomo/releases/download/v1.18.8/mihomo-linux-amd64-v1.18.8.gz | gunzip > mihomo_tool
+          chmod +x mihomo_tool
+          ./mihomo_tool -v # 验证工具是否正常可用
 
       - name: Smart Format and Compile
         run: |
           # 1. 预处理数据：移除 Windows 换行符、首尾空格和空行
           tr -d '\r' < OKTV.txt | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' > cleaned.txt
 
-          # 2. 核心转换逻辑：处理前缀逻辑，确保符合 mrs 编译规范
-          echo "payload:" > temp_rules.yaml # 初始化 YAML 头部
+          # 2. 核心转换逻辑：处理前缀符号并确保符合 mrs 编译规范
+          echo "payload:" > temp_rules.yaml
           while IFS= read -r line || [[ -n "$line" ]]; do
-            # 识别以 +. 或 . 开头的域名并转为 DOMAIN-SUFFIX
+            # 识别以 +. 或 . 开头的域名并自动转换为 DOMAIN-SUFFIX
             if [[ "$line" =~ ^(\+|\.)\.? ]]; then
-              clean_domain=$(echo "$line" | sed 's/^[+.]*//') # 移除所有前缀符号
-              echo "  - DOMAIN-SUFFIX,$clean_domain" >> temp_rules.yaml # 转换为后缀匹配
+              clean_domain=$(echo "$line" | sed 's/^[+.]*//')
+              echo "  - DOMAIN-SUFFIX,$clean_domain" >> temp_rules.yaml
             elif [[ "$line" != *","* ]]; then
-              echo "  - DOMAIN,$line" >> temp_rules.yaml # 转换为标准全域名匹配
+              echo "  - DOMAIN,$line" >> temp_rules.yaml
             else
-              echo "  - $line" >> temp_rules.yaml # 保留原有已定义的规则格式
+              echo "  - $line" >> temp_rules.yaml
             fi
           done < cleaned.txt
 
-          # 3. 打印预览：在日志中显示生成的 YAML 结构，方便排查格式
-          echo "--- Final YAML Preview (Top 10 lines) ---"
-          head -n 10 temp_rules.yaml # 输出前10行进行人工核验
-          echo "----------------------------------------"
+          # 3. 调试输出：预览生成的 YAML 前 10 行
+          echo "--- Generated YAML Preview ---"
+          head -n 10 temp_rules.yaml
+          echo "------------------------------"
 
-          # 4. 执行编译：明确指定子命令，防止误入代理模式
-          ./mihomo_tool rule-set compile temp_rules.yaml OKTV.mrs # 执行二进制转换
+          # 4. 执行二进制编译
+          ./mihomo_tool rule-set compile temp_rules.yaml OKTV.mrs
 
-          # 5. 验证生成结果
+          # 5. 验证文件
           if [ ! -s "OKTV.mrs" ]; then
-            echo "::error::编译失败，OKTV.mrs 文件为空，请检查上述 YAML 预览。"; exit 1 # 报错并停止
+            echo "::error::编译失败，生成的 MRS 文件为空。"; exit 1
           fi
 
       - name: Commit and Push
         run: |
-          git config --global user.name "github-actions[bot]" # 设置机器人名称
-          git config --global user.email "github-actions[bot]@users.noreply.github.com" # 设置机器人邮箱
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          git add OKTV.mrs # 暂存生成的二进制文件
-          if git diff --staged --quiet; then
-            echo "No changes in MRS file." # 如果内容无变动，不进行提交
-          else
-            git commit -m "Auto-update OKTV.mrs [skip ci]" # 提交更改并跳过循环触发
-            git push # 推送到远程仓库
+          if [ -f "OKTV.mrs" ]; then
+            git add OKTV.mrs
+            if git diff --staged --quiet; then
+              echo "No changes to push."
+            else
+              git commit -m "Auto-update OKTV.mrs [skip ci]"
+              git push
+            fi
           fi
