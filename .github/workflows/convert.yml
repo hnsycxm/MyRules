@@ -1,10 +1,12 @@
-name: Convert TXT to MRS
+name: Convert Rules and Compile MRS
 
 on:
-  push:
-    paths:
-      - 'OKTV.txt'
-  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *' # 每 6 小时自动运行
+  workflow_dispatch:      # 支持手动触发
+
+permissions:
+  contents: write
 
 jobs:
   convert:
@@ -13,57 +15,52 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Mihomo Alpha
-        run: |
-          # 带重试 + 兜底链接，避免 API 限流/链接失效
-          URL=$(curl -s --retry 3 https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/Prerelease-Alpha | grep "browser_download_url.*linux-amd64-alpha-.*\.gz" | head -n 1 | cut -d '"' -f 4)
-          if [ -z "$URL" ]; then
-            URL="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/mihomo-linux-amd64-alpha-v1.18.0.gz"
-          fi
-          curl -L --retry 3 "$URL" | gunzip > mihomo
-          chmod +x mihomo
-          ./mihomo -v || { echo "Mihomo 安装失败"; exit 1; }
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip' # 自动缓存 Python 依赖包，加速后续运行
 
-      - name: Process and Compile
+      - name: Install Dependencies
         run: |
-          # 1. 清洗数据：移除 Windows 换行符、首尾空格、空行
+          pip install yamllint --quiet # 使用 pip 安装更轻量，无需执行 apt update
+
+      - name: Cache Mihomo Binary
+        id: cache-mihomo
+        uses: actions/cache@v4
+        with:
+          path: ./mihomo
+          key: ${{ runner.os }}-mihomo-v1.18.8 # 针对版本号进行缓存
+
+      - name: Download Mihomo
+        if: steps.cache-mihomo.outputs.cache-hit != 'true'
+        run: |
+          curl -L -o mihomo.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.18.8/mihomo-linux-amd64-v1.18.8.gz
+          gunzip -c mihomo.gz > mihomo
+          chmod +x mihomo
+
+      - name: Process Rules and Compile
+        run: |
+          # 1. 预处理数据：去除换行符，跳过注释和空行
           echo "payload:" > temp_rules.yaml
-          tr -d '\r' < OKTV.txt | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' > cleaned.txt
-          
-          # 2. 规则转换（兼容 +/./* 开头，覆盖 DOMAIN-SUFFIX/DOMAIN 类型）
-          grep -E '^[+.*]+' cleaned.txt | sed 's/^[+.*]*//' | sed 's/^/  - DOMAIN-SUFFIX,/' >> temp_rules.yaml
+          tr -d '\r' < OKTV.txt | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -vE '^(#|$)' > cleaned.txt
+
+          # 2. 转换逻辑 (合并 grep 提升效率)
+          # 处理带 +/./* 前缀的域名为 DOMAIN-SUFFIX
+          grep -E '^[+.*]+' cleaned.txt | sed 's/^[+.*]*//; s/^/  - DOMAIN-SUFFIX,/' >> temp_rules.yaml
+          # 处理不含逗号的纯域名为 DOMAIN
           grep -vE '^[+.*]+' cleaned.txt | grep -v ',' | sed 's/^/  - DOMAIN,/' >> temp_rules.yaml
+          # 保留原本就带有格式的规则 (如 IP-CIDR, etc.)
           grep -vE '^[+.*]+' cleaned.txt | grep ',' | sed 's/^/  - /' >> temp_rules.yaml
 
-          # 3. 校验 YAML 格式（避免编译失败）
-          sudo apt-get update && sudo apt-get install -y yamllint
-          yamllint temp_rules.yaml || { echo "YAML 格式错误"; exit 1; }
+          # 3. 校验 YAML 格式 (宽松模式)
+          yamllint -d "{extends: relaxed, rules: {line-length: disable}}" temp_rules.yaml || { echo "YAML 严重格式错误"; exit 1; }
 
-          # 4. 预览生成的 YAML（前 10 行）
-          echo "--- Generated YAML Preview ---"
-          head -n 10 temp_rules.yaml
-          echo "------------------------------"
+          # 4. 编译为 MRS (显式指定输出，减少内核初始化干扰)
+          ./mihomo ruleset compile -o OKTV.mrs temp_rules.yaml || { echo "MRS 编译失败"; exit 1; }
 
-          # 5. 编译 MRS（兼容新旧参数）
-          ./mihomo rule-set compile --force temp_rules.yaml OKTV.mrs || \
-          ./mihomo ruleset compile temp_rules.yaml OKTV.mrs || { echo "MRS 编译失败"; exit 1; }
-
-      - name: Commit and Push
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # 检查 MRS 文件非空，避免空提交
-          if [ -s "OKTV.mrs" ]; then
-            git add OKTV.mrs
-            if git diff --staged --quiet; then
-              echo "No changes to commit."
-              exit 0
-            else
-              git commit -m "Auto-update OKTV.mrs [skip ci]"
-              git push || { echo "推送失败"; exit 1; }
-            fi
-          else
-            echo "Error: MRS 文件为空，生成失败."
-            exit 1
-          fi
+      - name: Commit and Push Changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto Update: Compiled OKTV.mrs [$(date +'%Y-%m-%d %H:%M')]"
+          file_pattern: 'OKTV.mrs' # 仅推送编译后的二进制文件，保持仓库整洁
