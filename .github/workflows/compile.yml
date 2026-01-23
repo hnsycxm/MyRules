@@ -2,7 +2,7 @@ name: Auto Compile MRS                                                          
 on:                                                                                              # 触发条件配置 # 维护
   push:                                                                                          # 推送事件触发 # 维护
     paths:                                                                                       # 指定文件路径过滤 # 维护
-      - 'oktv.txt'                                                                               # 仅当 oktv.txt 变动时执行工作流 # 维护
+      - 'OKTV.txt'                                                                               # 仅当 oktv.txt 变动时执行工作流 # 维护
   workflow_dispatch:                                                                             # 支持手动在 GitHub Actions 页面点击运行 # 维护
 jobs:                                                                                            # 任务定义区 # 维护
   build:                                                                                         # 作业 ID：build # 维护
@@ -17,11 +17,11 @@ jobs:                                                                           
       - name: Compile MRS                                                                        # 步骤3：将文本规则编译为二进制格式 # 维护
         run: |                                                                                   # 执行多行 Shell 命令 # 维护
           # 使用更严谨的子命令调用，并显式指定文件路径
-          ./mihomo rule-set compile domain oktv.txt oktv.mrs                  # 调用内核命令：行为=域名，输出文件=oktv.mrs，源文件=oktv.txt # 修改
+          ./mihomo rule-set compile domain OKTV.txt OKTV.mrs                  # 调用内核命令：行为=域名，输出文件=oktv.mrs，源文件=oktv.txt # 修改
       - name: Push                                                                               # 步骤4：将生成的二进制文件推送回仓库 # 维护
         run: |                                                                                   # 执行多行 Shell 命令 # 维护
           git config --global user.name "github-actions[bot]"                                    # 设置 Git 全局配置：提交者机器人名称 # 维护
           git config --global user.email "github-actions[bot]@users.noreply.github.com"          # 设置 Git 全局配置：提交者机器人邮箱 # 维护
-          ls -lh oktv.mrs && git add oktv.mrs                                                                       # 将编译生成的 .mrs 文件添加到暂存区 # 维护
-          git commit -m "chore: auto-update oktv.mrs" || exit 0                                  # 提交更改，若文件无变化则正常退出不报错 # 维护
+          ls -lh OKTV.mrs && git add OKTV.mrs                                                                       # 将编译生成的 .mrs 文件添加到暂存区 # 维护
+          git commit -m "chore: auto-update OKTV.mrs" || exit 0                                  # 提交更改，若文件无变化则正常退出不报错 # 维护
           git push                                                                               # 将本地提交推送到 GitHub 远程仓库 # 维护
