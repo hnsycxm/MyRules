@@ -1,4 +1,3 @@
-# 修改点：更正下载解压逻辑，适配最新版二进制文件名
 name: Convert TXT to MRS
 
 on:
@@ -14,30 +13,42 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Download and Prepare Mihomo
+      - name: Install Mihomo
         run: |
-          # 获取最新版本号并下载 .gz 文件 (不再使用固定版本，防止链接失效)
-          URL=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/Prerelease-Alpha | grep "browser_download_url.*linux-amd64-v.*\.gz" | head -n 1 | cut -d '"' -f 4)
-          curl -L -o mihomo.gz "$URL"
-          
-          # 修复点：使用 gunzip 而不是 tar，并重命名为 mihomo
-          gunzip -c mihomo.gz > mihomo # 解压到单个可执行文件
-          chmod +x mihomo # 赋予执行权限
+          # 下载官方稳定版 (v1.18.3)
+          curl -L -o mihomo.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.gz
+          gunzip mihomo.gz
+          mv mihomo-linux-amd64-v1.18.3 mihomo_tool
+          chmod +x mihomo_tool
+          ./mihomo_tool -v # 验证版本，确保下载成功
 
-      - name: Compile MRS
+      - name: Prepare and Compile
         run: |
-          # 检查 TXT 内容，如果缺少 payload 头部，转换可能会失败
-          # 这里假设 OKTV.txt 是纯列表格式，自动将其转换为编译所需的临时格式
+          # 1. 构造标准的 YAML 格式
+          # 先创建头部
           echo "payload:" > temp_rules.yaml
-          sed 's/^/  - /' OKTV.txt >> temp_rules.yaml
           
-          # 执行编译转换
-          ./mihomo rule-set compile temp_rules.yaml OKTV.mrs
+          # 2. 处理 OKTV.txt：去除空行、首尾空格，并添加 YAML 列表符号
+          # 使用 grep 过滤掉空行，用 sed 给每行开头增加 "  - "
+          grep -v '^$' OKTV.txt | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/^/  - /' >> temp_rules.yaml
+          
+          # 3. 强制执行编译转换命令 (使用绝对路径和明确的子命令)
+          ./mihomo_tool rule-set compile temp_rules.yaml OKTV.mrs
+          
+          # 4. 验证文件是否生成
+          if [ -f "OKTV.mrs" ]; then
+            echo "Success: OKTV.mrs generated."
+          else
+            echo "Error: OKTV.mrs was not created."
+            exit 1
+          fi
 
       - name: Commit and Push
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 仅在文件有变化时提交
           git add OKTV.mrs
           if git diff --staged --quiet; then
             echo "No changes in MRS file."
