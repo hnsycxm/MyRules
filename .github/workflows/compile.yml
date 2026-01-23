@@ -1,3 +1,4 @@
+#修改前
 name: Auto Compile MRS
 on:
   push:
@@ -25,3 +26,32 @@ jobs:
           git add oktv.mrs
           git commit -m "chore: auto-update oktv.mrs" || exit 0
           git push
+
+#修改后
+name: Auto Compile MRS                                                                           # 工作流名称：自动编译 MRS 规则集 # 维护
+on:                                                                                              # 触发条件配置 # 维护
+  push:                                                                                          # 推送事件触发 # 维护
+    paths:                                                                                       # 指定文件路径过滤 # 维护
+      - 'oktv.txt'                                                                               # 仅当 oktv.txt 变动时执行工作流 # 维护
+  workflow_dispatch:                                                                             # 支持手动在 GitHub Actions 页面点击运行 # 维护
+jobs:                                                                                            # 任务定义区 # 维护
+  build:                                                                                         # 作业 ID：build # 维护
+    runs-on: ubuntu-latest                                                                       # 使用最新版 Ubuntu 虚拟机作为运行环境 # 维护
+    steps:                                                                                       # 执行步骤列表 # 维护
+      - uses: actions/checkout@v4                                                                # 步骤1：签出（下载）仓库代码到运行环境 # 维护
+      - name: Setup Mihomo                                                                       # 步骤2：安装 Mihomo 内核二进制文件 # 维护
+        run: |                                                                                   # 执行多行 Shell 命令 # 维护
+          wget https://github.com/MetaCubeX/mihomo/releases/download/v1.18.1/mihomo-linux-amd64-v1.18.1.gz # 从官方仓库下载指定版本的内核 # 维护
+          gunzip mihomo-linux-amd64-v1.18.1.gz                                                   # 解压下载的 gz 压缩包 # 维护
+          mv mihomo-linux-amd64-v1.18.1 mihomo && chmod +x mihomo                                 # 重命名为 mihomo 并授予可执行权限 # 维护
+      - name: Compile MRS                                                                        # 步骤3：将文本规则编译为二进制格式 # 维护
+        run: |                                                                                   # 执行多行 Shell 命令 # 维护
+          # 使用更严谨的子命令调用，并显式指定文件路径
+          ./mihomo ruleset compile --behavior domain --output oktv.mrs oktv.txt                  # 调用内核命令：行为=域名，输出文件=oktv.mrs，源文件=oktv.txt # 修改
+      - name: Push                                                                               # 步骤4：将生成的二进制文件推送回仓库 # 维护
+        run: |                                                                                   # 执行多行 Shell 命令 # 维护
+          git config --global user.name "github-actions[bot]"                                    # 设置 Git 全局配置：提交者机器人名称 # 维护
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"          # 设置 Git 全局配置：提交者机器人邮箱 # 维护
+          git add oktv.mrs                                                                       # 将编译生成的 .mrs 文件添加到暂存区 # 维护
+          git commit -m "chore: auto-update oktv.mrs" || exit 0                                  # 提交更改，若文件无变化则正常退出不报错 # 维护
+          git push                                                                               # 将本地提交推送到 GitHub 远程仓库 # 维护
