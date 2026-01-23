@@ -15,31 +15,34 @@ jobs:
 
       - name: Install Mihomo
         run: |
-          # 下载官方稳定版 (v1.18.3)
+          # 稳定下载 v1.18.3
           curl -L -o mihomo.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.gz
-          gunzip mihomo.gz
+          gunzip -f mihomo.gz
           mv mihomo-linux-amd64-v1.18.3 mihomo_tool
           chmod +x mihomo_tool
-          ./mihomo_tool -v # 验证版本，确保下载成功
 
       - name: Prepare and Compile
         run: |
-          # 1. 构造标准的 YAML 格式
-          # 先创建头部
-          echo "payload:" > temp_rules.yaml
+          # 1. 预处理 OKTV.txt
+          # 清除可能存在的 Windows 换行符 (\r)，并删除空行和首尾空格
+          grep -v '^$' OKTV.txt | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > cleaned.txt
           
-          # 2. 处理 OKTV.txt：去除空行、首尾空格，并添加 YAML 列表符号
-          # 使用 grep 过滤掉空行，用 sed 给每行开头增加 "  - "
-          grep -v '^$' OKTV.txt | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/^/  - /' >> temp_rules.yaml
-          
-          # 3. 强制执行编译转换命令 (使用绝对路径和明确的子命令)
-          ./mihomo_tool rule-set compile temp_rules.yaml OKTV.mrs
-          
-          # 4. 验证文件是否生成
-          if [ -f "OKTV.mrs" ]; then
-            echo "Success: OKTV.mrs generated."
+          # 2. 构造 YAML (检测是否已经包含 payload)
+          if grep -q "payload:" cleaned.txt; then
+            cp cleaned.txt temp_rules.yaml
           else
-            echo "Error: OKTV.mrs was not created."
+            echo "payload:" > temp_rules.yaml
+            sed 's/^/  - /' cleaned.txt >> temp_rules.yaml
+          fi
+          
+          # 3. 调试输出：在日志中打印前 5 行，方便排查格式
+          echo "--- Generated YAML Header ---"
+          head -n 5 temp_rules.yaml
+          echo "-----------------------------"
+          
+          # 4. 执行编译并捕获详细错误
+          if ! ./mihomo_tool rule-set compile temp_rules.yaml OKTV.mrs; then
+            echo "Error: Mihomo compiler failed."
             exit 1
           fi
 
@@ -48,11 +51,16 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # 仅在文件有变化时提交
-          git add OKTV.mrs
-          if git diff --staged --quiet; then
-            echo "No changes in MRS file."
+          # 确保文件存在且不为空
+          if [ -s "OKTV.mrs" ]; then
+            git add OKTV.mrs
+            if git diff --staged --quiet; then
+              echo "No changes in MRS file."
+            else
+              git commit -m "Auto-update OKTV.mrs [skip ci]"
+              git push
+            fi
           else
-            git commit -m "Auto-update OKTV.mrs [skip ci]"
-            git push
+            echo "Error: OKTV.mrs is empty or not found."
+            exit 1
           fi
