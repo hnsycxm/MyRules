@@ -15,51 +15,50 @@ jobs:
 
       - name: Install Mihomo
         run: |
-          # 下载并解压工具
-          curl -L -o mihomo.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.gz
-          gunzip -f mihomo.gz
-          mv mihomo-linux-amd64-v1.18.3 mihomo_tool
+          # 修复点：直接解压并重命名，不再使用 mv 查找不确定的文件名
+          curl -L https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.gz | gunzip > mihomo_tool
           chmod +x mihomo_tool
+          ./mihomo_tool -v # 验证工具是否正常工作
 
       - name: Smart Format and Compile
         run: |
-          # 1. 清洗原始数据：去除空格、Windows换行符、空行
+          # 1. 清洗数据：清除回车符、首尾空格、空行
           tr -d '\r' < OKTV.txt | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' > cleaned.txt
           
-          # 2. 智能转换：确保每一行都是符合 Mihomo 要求的 YAML 列表项
+          # 2. 构造 YAML 格式
           echo "payload:" > temp_rules.yaml
           while IFS= read -r line; do
-            # 如果行内不包含逗号，说明只有域名/IP，自动补全为 DOMAIN 类型
+            # 如果行内不包含逗号，自动补全为 DOMAIN 类型
             if [[ "$line" != *","* ]]; then
               echo "  - DOMAIN,$line" >> temp_rules.yaml
             else
-              # 如果已经有逗号（如 DOMAIN-SUFFIX,abc.com），直接添加横杠
               echo "  - $line" >> temp_rules.yaml
             fi
           done < cleaned.txt
           
-          # 3. 调试输出：如果编译失败，我们可以看到最后生成的 YAML 长什么样
-          echo "--- Top 10 lines of generated YAML ---"
+          # 3. 调试：打印生成的 YAML 前几行到日志
+          echo "--- Generated YAML Preview ---"
           head -n 10 temp_rules.yaml
-          echo "--------------------------------------"
+          echo "------------------------------"
           
           # 4. 执行编译
-          if ! ./mihomo_tool rule-set compile temp_rules.yaml OKTV.mrs; then
-            echo "::error::Mihomo 编译失败，请检查上方打印的内容格式是否正确。"
-            exit 1
-          fi
+          ./mihomo_tool rule-set compile temp_rules.yaml OKTV.mrs
 
       - name: Commit and Push
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          if [ -f "OKTV.mrs" ]; then
+          # 检查文件是否生成且有内容
+          if [ -s "OKTV.mrs" ]; then
             git add OKTV.mrs
             if git diff --staged --quiet; then
-              echo "No changes."
+              echo "No changes in MRS file."
             else
               git commit -m "Auto-update OKTV.mrs [skip ci]"
               git push
             fi
+          else
+            echo "Error: OKTV.mrs generation failed."
+            exit 1
           fi
