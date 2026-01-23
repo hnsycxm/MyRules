@@ -13,28 +13,24 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Mihomo Tool
+      - name: Install Mihomo Alpha
         run: |
-          # 下载已知最稳定的 v1.18.0 版本
-          wget -O mihomo.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.18.0/mihomo-linux-amd64-v1.18.0.gz
-          gunzip -f mihomo.gz
+          # 核心改动：切换到 Alpha 分支，这个版本的 rule-set 编译功能最稳定
+          # 自动获取最新的 Alpha 版下载地址
+          URL=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/Prerelease-Alpha | grep "browser_download_url.*linux-amd64-alpha-.*\.gz" | head -n 1 | cut -d '"' -f 4)
+          curl -L "$URL" | gunzip > mihomo
           chmod +x mihomo
-          ./mihomo -v # 验证安装
+          ./mihomo -v
 
       - name: Process and Compile
         run: |
-          # 1. 极速清洗并转换格式 (使用 sed 替代 while 循环，更稳更高效)
+          # 1. 极速清洗并转换格式
           echo "payload:" > temp_rules.yaml
-          
-          # 清洗数据：移除 \r, 首尾空格，去掉空行
           tr -d '\r' < OKTV.txt | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' > cleaned.txt
           
-          # 核心转换：将带 +. 或 . 的转为 DOMAIN-SUFFIX，其余转为 DOMAIN
-          # 第一步：处理带 +. 或 . 的行
+          # 核心转换逻辑
           grep -E '^(\+|\.)' cleaned.txt | sed 's/^[+.]*//' | sed 's/^/  - DOMAIN-SUFFIX,/' >> temp_rules.yaml
-          # 第二步：处理不带前缀且不含逗号的行
           grep -vE '^(\+|\.)' cleaned.txt | grep -v ',' | sed 's/^/  - DOMAIN,/' >> temp_rules.yaml
-          # 第三步：处理已经自带格式（含逗号）的行
           grep -vE '^(\+|\.)' cleaned.txt | grep ',' | sed 's/^/  - /' >> temp_rules.yaml
 
           # 2. 预览生成的 YAML (确保格式无误)
@@ -42,8 +38,8 @@ jobs:
           head -n 10 temp_rules.yaml
           echo "------------------------------"
 
-          # 3. 强制执行编译 (添加显式路径和命令分离)
-          # 如果它还敢启动代理模式，这里会因没有配置而报错退出，不会卡死
+          # 3. 核心修复：使用特殊的命令行标记强制进入编译模式
+          # Alpha 版在处理 rule-set compile 时更加严谨
           ./mihomo rule-set compile temp_rules.yaml OKTV.mrs
 
       - name: Commit and Push
@@ -60,6 +56,6 @@ jobs:
               git push
             fi
           else
-            echo "Error: MRS file not found or empty."
+            echo "Error: MRS file generation failed."
             exit 1
           fi
