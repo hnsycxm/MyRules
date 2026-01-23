@@ -1,40 +1,47 @@
-# 新增文件: .github/workflows/convert.yml
+# 修改点：更正下载解压逻辑，适配最新版二进制文件名
 name: Convert TXT to MRS
 
 on:
   push:
     paths:
-      - 'OKTV.txt' # 仅在 OKTV.txt 修改时触发
-  workflow_dispatch: # 允许手动触发
+      - 'OKTV.txt'
+  workflow_dispatch:
 
 jobs:
   convert:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4 # 检出仓库代码内容
+        uses: actions/checkout@v4
 
-      - name: Download Mihomo Tool
+      - name: Download and Prepare Mihomo
         run: |
-          # 下载最新的 mihomo 二进制文件用于转换格式
-          curl -L -o mihomo.tar.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.tar.gz # 下载内核
-          tar -xzf mihomo.tar.gz # 解压
+          # 获取最新版本号并下载 .gz 文件 (不再使用固定版本，防止链接失效)
+          URL=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/Prerelease-Alpha | grep "browser_download_url.*linux-amd64-v.*\.gz" | head -n 1 | cut -d '"' -f 4)
+          curl -L -o mihomo.gz "$URL"
+          
+          # 修复点：使用 gunzip 而不是 tar，并重命名为 mihomo
+          gunzip -c mihomo.gz > mihomo # 解压到单个可执行文件
           chmod +x mihomo # 赋予执行权限
 
       - name: Compile MRS
         run: |
-          # 使用 mihomo 将 txt 转换为 mrs 格式
-          ./mihomo rule-set compile OKTV.txt OKTV.mrs # 执行编译转换指令
+          # 检查 TXT 内容，如果缺少 payload 头部，转换可能会失败
+          # 这里假设 OKTV.txt 是纯列表格式，自动将其转换为编译所需的临时格式
+          echo "payload:" > temp_rules.yaml
+          sed 's/^/  - /' OKTV.txt >> temp_rules.yaml
+          
+          # 执行编译转换
+          ./mihomo rule-set compile temp_rules.yaml OKTV.mrs
 
       - name: Commit and Push
         run: |
-          git config --global user.name "github-actions[bot]" # 设置机器人名称
-          git config --global user.email "github-actions[bot]@users.noreply.github.com" # 设置机器人邮箱
-          git add OKTV.mrs # 暂存生成的 mrs 文件
-          # 检查是否有文件变动，避免空提交报错
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add OKTV.mrs
           if git diff --staged --quiet; then
             echo "No changes in MRS file."
           else
-            git commit -m "Auto-update OKTV.mrs [skip ci]" # 提交更改并跳过循环触发
-            git push # 推送到远程仓库
+            git commit -m "Auto-update OKTV.mrs [skip ci]"
+            git push
           fi
