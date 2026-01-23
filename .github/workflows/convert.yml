@@ -15,34 +15,37 @@ jobs:
 
       - name: Install Mihomo
         run: |
-          # 稳定下载 v1.18.3
+          # 下载并解压工具
           curl -L -o mihomo.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.gz
           gunzip -f mihomo.gz
           mv mihomo-linux-amd64-v1.18.3 mihomo_tool
           chmod +x mihomo_tool
 
-      - name: Prepare and Compile
+      - name: Smart Format and Compile
         run: |
-          # 1. 预处理 OKTV.txt
-          # 清除可能存在的 Windows 换行符 (\r)，并删除空行和首尾空格
-          grep -v '^$' OKTV.txt | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > cleaned.txt
+          # 1. 清洗原始数据：去除空格、Windows换行符、空行
+          tr -d '\r' < OKTV.txt | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' > cleaned.txt
           
-          # 2. 构造 YAML (检测是否已经包含 payload)
-          if grep -q "payload:" cleaned.txt; then
-            cp cleaned.txt temp_rules.yaml
-          else
-            echo "payload:" > temp_rules.yaml
-            sed 's/^/  - /' cleaned.txt >> temp_rules.yaml
-          fi
+          # 2. 智能转换：确保每一行都是符合 Mihomo 要求的 YAML 列表项
+          echo "payload:" > temp_rules.yaml
+          while IFS= read -r line; do
+            # 如果行内不包含逗号，说明只有域名/IP，自动补全为 DOMAIN 类型
+            if [[ "$line" != *","* ]]; then
+              echo "  - DOMAIN,$line" >> temp_rules.yaml
+            else
+              # 如果已经有逗号（如 DOMAIN-SUFFIX,abc.com），直接添加横杠
+              echo "  - $line" >> temp_rules.yaml
+            fi
+          done < cleaned.txt
           
-          # 3. 调试输出：在日志中打印前 5 行，方便排查格式
-          echo "--- Generated YAML Header ---"
-          head -n 5 temp_rules.yaml
-          echo "-----------------------------"
+          # 3. 调试输出：如果编译失败，我们可以看到最后生成的 YAML 长什么样
+          echo "--- Top 10 lines of generated YAML ---"
+          head -n 10 temp_rules.yaml
+          echo "--------------------------------------"
           
-          # 4. 执行编译并捕获详细错误
+          # 4. 执行编译
           if ! ./mihomo_tool rule-set compile temp_rules.yaml OKTV.mrs; then
-            echo "Error: Mihomo compiler failed."
+            echo "::error::Mihomo 编译失败，请检查上方打印的内容格式是否正确。"
             exit 1
           fi
 
@@ -51,16 +54,12 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # 确保文件存在且不为空
-          if [ -s "OKTV.mrs" ]; then
+          if [ -f "OKTV.mrs" ]; then
             git add OKTV.mrs
             if git diff --staged --quiet; then
-              echo "No changes in MRS file."
+              echo "No changes."
             else
               git commit -m "Auto-update OKTV.mrs [skip ci]"
               git push
             fi
-          else
-            echo "Error: OKTV.mrs is empty or not found."
-            exit 1
           fi
