@@ -3,8 +3,8 @@ name: Convert TXT to MRS
 on:
   push:
     paths:
-      - 'OKTV.txt' # 仅在 OKTV.txt 变动时触发
-  workflow_dispatch: # 支持手动触发
+      - 'OKTV.txt'
+  workflow_dispatch:
 
 jobs:
   convert:
@@ -13,56 +13,53 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Mihomo
+      - name: Install Mihomo Tool
         run: |
-          # 核心修复：直接将解压流重定向到目标文件名，避免文件名匹配失败
-          curl -L https://github.com/MetaCubeX/mihomo/releases/download/v1.18.8/mihomo-linux-amd64-v1.18.8.gz | gunzip > mihomo_tool
-          chmod +x mihomo_tool
-          ./mihomo_tool -v # 验证工具是否正常可用
+          # 下载已知最稳定的 v1.18.0 版本
+          wget -O mihomo.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.18.0/mihomo-linux-amd64-v1.18.0.gz
+          gunzip -f mihomo.gz
+          chmod +x mihomo
+          ./mihomo -v # 验证安装
 
-      - name: Smart Format and Compile
+      - name: Process and Compile
         run: |
-          # 1. 预处理数据：移除 Windows 换行符、首尾空格和空行
-          tr -d '\r' < OKTV.txt | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' > cleaned.txt
-
-          # 2. 核心转换逻辑：处理前缀符号并确保符合 mrs 编译规范
+          # 1. 极速清洗并转换格式 (使用 sed 替代 while 循环，更稳更高效)
           echo "payload:" > temp_rules.yaml
-          while IFS= read -r line || [[ -n "$line" ]]; do
-            # 识别以 +. 或 . 开头的域名并自动转换为 DOMAIN-SUFFIX
-            if [[ "$line" =~ ^(\+|\.)\.? ]]; then
-              clean_domain=$(echo "$line" | sed 's/^[+.]*//')
-              echo "  - DOMAIN-SUFFIX,$clean_domain" >> temp_rules.yaml
-            elif [[ "$line" != *","* ]]; then
-              echo "  - DOMAIN,$line" >> temp_rules.yaml
-            else
-              echo "  - $line" >> temp_rules.yaml
-            fi
-          done < cleaned.txt
+          
+          # 清洗数据：移除 \r, 首尾空格，去掉空行
+          tr -d '\r' < OKTV.txt | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' > cleaned.txt
+          
+          # 核心转换：将带 +. 或 . 的转为 DOMAIN-SUFFIX，其余转为 DOMAIN
+          # 第一步：处理带 +. 或 . 的行
+          grep -E '^(\+|\.)' cleaned.txt | sed 's/^[+.]*//' | sed 's/^/  - DOMAIN-SUFFIX,/' >> temp_rules.yaml
+          # 第二步：处理不带前缀且不含逗号的行
+          grep -vE '^(\+|\.)' cleaned.txt | grep -v ',' | sed 's/^/  - DOMAIN,/' >> temp_rules.yaml
+          # 第三步：处理已经自带格式（含逗号）的行
+          grep -vE '^(\+|\.)' cleaned.txt | grep ',' | sed 's/^/  - /' >> temp_rules.yaml
 
-          # 3. 调试输出：预览生成的 YAML 前 10 行
+          # 2. 预览生成的 YAML (确保格式无误)
           echo "--- Generated YAML Preview ---"
           head -n 10 temp_rules.yaml
           echo "------------------------------"
 
-          # 4. 执行二进制编译
-          ./mihomo_tool rule-set compile temp_rules.yaml OKTV.mrs
-
-          # 5. 验证文件
-          if [ ! -s "OKTV.mrs" ]; then
-            echo "::error::编译失败，生成的 MRS 文件为空。"; exit 1
-          fi
+          # 3. 强制执行编译 (添加显式路径和命令分离)
+          # 如果它还敢启动代理模式，这里会因没有配置而报错退出，不会卡死
+          ./mihomo rule-set compile temp_rules.yaml OKTV.mrs
 
       - name: Commit and Push
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          if [ -f "OKTV.mrs" ]; then
+          if [ -s "OKTV.mrs" ]; then
             git add OKTV.mrs
             if git diff --staged --quiet; then
-              echo "No changes to push."
+              echo "No changes."
             else
               git commit -m "Auto-update OKTV.mrs [skip ci]"
               git push
             fi
+          else
+            echo "Error: MRS file not found or empty."
+            exit 1
           fi
