@@ -1,0 +1,40 @@
+# 新增文件: .github/workflows/convert.yml
+name: Convert TXT to MRS
+
+on:
+  push:
+    paths:
+      - 'OKTV.txt' # 仅在 OKTV.txt 修改时触发
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4 # 检出仓库代码内容
+
+      - name: Download Mihomo Tool
+        run: |
+          # 下载最新的 mihomo 二进制文件用于转换格式
+          curl -L -o mihomo.tar.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.tar.gz # 下载内核
+          tar -xzf mihomo.tar.gz # 解压
+          chmod +x mihomo # 赋予执行权限
+
+      - name: Compile MRS
+        run: |
+          # 使用 mihomo 将 txt 转换为 mrs 格式
+          ./mihomo rule-set compile OKTV.txt OKTV.mrs # 执行编译转换指令
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "github-actions[bot]" # 设置机器人名称
+          git config --global user.email "github-actions[bot]@users.noreply.github.com" # 设置机器人邮箱
+          git add OKTV.mrs # 暂存生成的 mrs 文件
+          # 检查是否有文件变动，避免空提交报错
+          if git diff --staged --quiet; then
+            echo "No changes in MRS file."
+          else
+            git commit -m "Auto-update OKTV.mrs [skip ci]" # 提交更改并跳过循环触发
+            git push # 推送到远程仓库
+          fi
