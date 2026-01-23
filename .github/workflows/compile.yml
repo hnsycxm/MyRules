@@ -14,8 +14,10 @@ jobs:
           wget https://github.com/MetaCubeX/mihomo/releases/download/v1.18.1/mihomo-linux-amd64-v1.18.1.gz
           gunzip mihomo-linux-amd64-v1.18.1.gz
           mv mihomo-linux-amd64-v1.18.1 mihomo && chmod +x mihomo
-      - name: Compile
-        run: ./mihomo ruleset compile --behavior domain oktv.txt oktv.mrs
+      - name: Compile MRS
+        run: |
+          # 使用更严谨的子命令调用，并显式指定文件路径
+          ./mihomo ruleset compile --behavior domain --output oktv.mrs oktv.txt # 调整参数顺序，增加 --output 显式声明
       - name: Push
         run: |
           git config --global user.name "github-actions[bot]"
