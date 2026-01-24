@@ -1,163 +1,55 @@
-name: Convert TXT to MRS
+name: Test TXT to MRS (极简版)
 on:
-  push:
-    paths:
-      - '**.txt'
-  workflow_dispatch:
+  workflow_dispatch:  # 仅手动触发，避免自动执行干扰
 
 permissions:
   contents: write
-  actions: read
 
 jobs:
-  convert_job:
+  test_convert:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: 检出代码
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Install Mihomo (增强兜底+详细日志)
+      - name: 安装固定版本mihomo（100%可下载）
         run: |
-          set -eo pipefail  # 只在命令显式失败时退出，兼容更多场景
-          echo "===== 开始安装mihomo ====="
-          
-          # 方案2：直接使用固定版本（避免API获取失败，最稳定）
-          # 推荐：如果频繁失败，直接注释掉API获取逻辑，用下面的固定版本
-          TAG="v1.18.1"  # 已知可用的稳定版本
-          # # 可选：保留API获取（优先最新版，失败则用固定版）
-          # TAG=$(curl -sL --retry 2 --connect-timeout 8 \
-          #   "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest" \
-          #   | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4 || echo "v1.18.1")
-          
-          echo "当前使用的mihomo版本tag: $TAG"
-          CLEAN_TAG=${TAG#v}  # 移除tag前的v（如v1.18.1 → 1.18.1）
-          
-          # 定义多个备选下载链接（兼容所有命名格式）
-          DOWNLOAD_URLS=(
-            "https://github.com/MetaCubeX/mihomo/releases/download/${TAG}/mihomo-linux-amd64-${CLEAN_TAG}.gz"
-            "https://github.com/MetaCubeX/mihomo/releases/download/${TAG}/mihomo-linux-amd64.gz"
-            "https://github.com/MetaCubeX/mihomo/releases/download/v1.18.1/mihomo-linux-amd64-1.18.1.gz"  # 终极兜底
-          )
-          
-          # 遍历链接，直到下载成功
-          DOWNLOAD_SUCCESS=0
-          for URL in "${DOWNLOAD_URLS[@]}"; do
-            echo "尝试下载: $URL"
-            if curl -L --retry 3 --connect-timeout 15 "$URL" -o mihomo.gz; then
-              echo "✅ 下载成功"
-              DOWNLOAD_SUCCESS=1
-              break
-            else
-              echo "⚠️ 该链接下载失败，尝试下一个..."
-              rm -f mihomo.gz
-            fi
-          done
-          
-          # 下载失败则直接退出并提示
-          if [ $DOWNLOAD_SUCCESS -eq 0 ]; then
-            echo "❌ 所有链接都下载失败，请检查mihomo版本/tag是否正确"
-            exit 1
-          fi
-          
-          # 解压并验证文件
-          echo "解压mihomo.gz..."
+          # 直接用固定版本，避免API/链接问题
+          echo "安装mihomo v1.18.1（已知稳定版）"
+          curl -L "https://github.com/MetaCubeX/mihomo/releases/download/v1.18.1/mihomo-linux-amd64-1.18.1.gz" -o mihomo.gz
           gunzip -f mihomo.gz
-          if [ ! -f "mihomo" ]; then
-            echo "❌ 解压失败，文件不存在"
-            exit 1
-          fi
-          
-          # 赋予执行权限并安装
           chmod +x mihomo
           sudo mv mihomo /usr/local/bin/mihomo
-          
-          # 验证安装（兼容不同版本的输出格式）
-          if mihomo --version >/dev/null 2>&1; then
-            echo "✅ mihomo安装成功，版本: $(mihomo --version | head -n1 | awk '{print $2}')"
-          else
-            echo "⚠️ mihomo版本检测失败，但尝试继续执行（部分版本无--version）"
-          fi
+          # 打印版本，确认安装成功
+          mihomo --version || echo "版本检测忽略（部分版本无该命令）"
 
-      - name: Convert All TXT to MRS (失败不终止)
+      - name: 转换根目录的test.txt（仅测试单个文件）
         run: |
-          set -eo pipefail
-          echo "===== 开始转换TXT到MRS ====="
-          # 统计变量
-          TOTAL_FILES=0
-          SUCCESS_FILES=0
-          FAILED_FILES=0
-          EMPTY_FILES=0
-          
-          # 遍历所有txt文件（排除.git目录）
-          find . -type f -name "*.txt" -not -path "./.git/*" | while read -r file; do
-            TOTAL_FILES=$((TOTAL_FILES + 1))
-            filename="${file%.txt}"
-            echo -e "\n🔄 处理第 $TOTAL_FILES 个文件: $file"
-            
-            # 生成唯一临时文件
-            temp_file="${filename}.temp_rule.txt"
-            
-            # 增强版清洗规则（适配更多脏数据）
-            grep -v -E '\[source|#|//' "$file" | \  # 剔除注释、source行
-              sed -e 's/^[+./| \t]*//g' | \          # 剔除开头的+./|空格/tab
-              sed -e 's/[| \t].*$//g' | \            # 剔除行尾的|和后续内容
-              sed -e '/^[[:space:]]*$/d' | \         # 剔除空行
-              sed -e '/^$/d' > "$temp_file"          # 再次剔除空行
-            
-            # 检查临时文件是否为空
-            if [ ! -s "$temp_file" ]; then
-              echo "⚠️ 清洗后文件为空，跳过"
-              EMPTY_FILES=$((EMPTY_FILES + 1))
-              rm -f "$temp_file"
-              continue
-            fi
-            
-            # 编译MRS（失败只记录，不终止）
-            if mihomo rule-set compile "$temp_file" "${filename}.mrs"; then
-              echo "✅ 转换成功: ${filename}.mrs"
-              SUCCESS_FILES=$((SUCCESS_FILES + 1))
-              rm -f "$temp_file"
-            else
-              echo "❌ 转换失败: $file（保留临时文件便于排查）"
-              FAILED_FILES=$((FAILED_FILES + 1))
-              # 保留临时文件，便于排查问题（可选：rm -f "$temp_file" 自动删除）
-            fi
-          done
-          
-          # 输出统计结果
-          echo -e "\n===== 转换统计 ====="
-          echo "总文件数: $TOTAL_FILES"
-          echo "成功: $SUCCESS_FILES | 失败: $FAILED_FILES | 空文件: $EMPTY_FILES"
-          # 失败时不终止（避免整个工作流失败），如需严格检查，取消下面注释
-          # if [ $FAILED_FILES -gt 0 ]; then
-          #   echo "❌ 存在转换失败的文件，退出"
-          #   exit 1
-          # fi
-
-      - name: Commit and Push Changes
-        run: |
-          echo "===== 提交MRS文件 ====="
-          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          
-          # 检查是否有MRS文件变动
-          MRS_CHANGES=$(git status --porcelain | grep '\.mrs' || true)
-          if [ -n "$MRS_CHANGES" ]; then
-            echo "发现MRS文件变动，开始提交..."
-            git add '*.mrs' **/*.mrs
-            git commit -m "自动更新规则集: $(date +'%Y-%m-%d %H:%M:%S')"
-            # 推送（重试2次）
-            for i in 1 2 3; do
-              if git push; then
-                echo "✅ 提交成功"
-                break
-              else
-                echo "⚠️ 推送失败，第 $i 次重试..."
-                sleep 3
-              fi
-            done
-          else
-            echo "ℹ️ 无MRS文件变动，跳过提交"
+          # 先检查test.txt是否存在
+          if [ ! -f "test.txt" ]; then
+            echo "❌ 根目录没有test.txt文件！请先在仓库根目录新建test.txt"
+            exit 1
           fi
+          echo "开始转换test.txt..."
+          # 极简清洗规则（只保留纯域名）
+          grep -v '\[source' test.txt | sed 's/^+.\?//g' | sed '/^$/d' > temp.txt
+          # 编译为test.mrs
+          mihomo rule-set compile temp.txt test.mrs
+          # 检查是否生成mrs文件
+          if [ -f "test.mrs" ]; then
+            echo "✅ 成功生成test.mrs文件！"
+            ls -l test.mrs  # 打印文件信息
+          else
+            echo "❌ 未生成test.mrs文件"
+            exit 1
+          fi
+          rm temp.txt  # 清理临时文件
+
+      # 暂时注释提交步骤，先确认生成文件成功
+      # - name: 提交文件
+      #   run: |
+      #     git config --local user.name "github-actions[bot]"
+      #     git config --local user.email "bot@github.com"
+      #     git add test.mrs
+      #     git commit -m "测试生成test.mrs"
+      #     git push
