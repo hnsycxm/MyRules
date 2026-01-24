@@ -1,45 +1,58 @@
-name: Generate OpenClash MRS # 脚本名称
-
-on:
+"on": # 使用引号包裹关键词，防止解析器错误识别
   push:
     paths:
-      - [cite_start]'oktv.txt' # 仅在 oktv.txt 文件变动时触发 
-  workflow_dispatch: # 允许手动点击运行
+      - '**.txt' # 监听仓库内所有 .txt 文件的变动
+  workflow_dispatch: # 支持手动运行
 
 permissions:
-  contents: write # 赋予 Action 写入仓库的权限，用于提交生成的 mrs 文件
+  contents: write # 必须：授予 Action 推送代码到仓库的权限
 
 jobs:
-  build_mrs:
+  convert_job:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4 # 签出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 获取完整历史以确保能正确提交
 
       - name: Install Mihomo
         run: |
-          # 修改前: 手动安装环境
-          # 修改后: 自动获取最新的 Mihomo 内核并安装
-          URL=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | grep "browser_download_url.*linux-amd64-v" | cut -d '"' -f 4 | head -n 1) # 获取下载链接
-          curl -L $URL -o mihomo.gz # 下载压缩包
-          gunzip mihomo.gz # 解压
-          chmod +x mihomo # 赋予执行权限
-          mv mihomo /usr/local/bin/ # 移动到系统路径
+          # 获取最新版 Mihomo 下载链接
+          URL=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | grep "browser_download_url.*linux-amd64-v" | cut -d '"' -f 4 | head -n 1)
+          curl -L $URL -o mihomo.gz
+          gunzip mihomo.gz
+          chmod +x mihomo
+          sudo mv mihomo /usr/local/bin/mihomo
 
-      - name: Prepare and Compile Rule Set
+      - name: Convert All TXT to MRS
         run: |
-          # 修改前: 直接尝试编译可能因格式不兼容报错
-          # 修改后: 预处理文本格式，移除行首符号并生成 mrs
-          sed 's/^+.\?//g' oktv.txt > cleaned_oktv.txt # 清理 +. 前缀以符合 Mihomo 纯域名列表规范 
-          mihomo rule-set compile cleaned_oktv.txt oktv.mrs # 执行二进制编译
-          rm cleaned_oktv.txt # 删除中间过程文件
+          # 遍历仓库中所有的 .txt 文件并进行转换
+          for file in *.txt; do
+            if [ -f "$file" ]; then
+              filename="${file%.*}"
+              echo "正在转换: $file -> ${filename}.mrs"
+              
+              # 预处理：移除 +. 前缀（适配 OpenClash 纯域名规则集要求）
+              sed 's/^+.\?//g' "$file" > temp_rule.txt
+              
+              # 编译为二进制 mrs
+              mihomo rule-set compile temp_rule.txt "${filename}.mrs"
+              
+              rm temp_rule.txt
+            fi
+          done
 
       - name: Commit and Push Changes
         run: |
-          # 修改前: 仅生成文件不保存
-          # 修改后: 自动将生成的 oktv.mrs 文件提交并推送到仓库内
-          git config --local user.email "github-actions[bot]@users.noreply.github.com" # 配置 Bot 邮箱
-          git config --local user.name "github-actions[bot]" # 配置 Bot 名称
-          git add oktv.mrs # 追踪编译后的二进制文件
-          git commit -m "Auto-generate oktv.mrs from oktv.txt" || echo "No changes to commit" # 提交改动
-          git push # 推送至当前分支
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # 检查是否有文件变动，避免空提交报错
+          if [ -n "$(git status --porcelain)" ]; then
+            git add *.mrs
+            git commit -m "Auto-update MRS rules: $(date +'%Y-%m-%d %H:%M')"
+            git push
+          else
+            echo "没有发现 mrs 文件更新，跳过提交。"
+          fi
