@@ -61,7 +61,7 @@ process_rules() {
     log "已将生成文件移动到上级目录: $mihomo_mrs_file"
     
     # 删除中间的 Mihomo 格式文本文件，只保留原始输入文件
-    rm -f "../txt/$mihomo_txt_file"
+    rm -f "$mihomo_txt_file"
     log "已删除中间 Mihomo 格式文本文件: $mihomo_txt_file"
 }
 
@@ -152,5 +152,5 @@ done
 wait
 
 # 清理缓存文件
-rm -rf ./*_domain.txt "$mihomo_tool"
+rm -rf ./*_domain.txt ./*_Mihomo.txt "$mihomo_tool"
 log "脚本执行完成，已清理临时文件"
