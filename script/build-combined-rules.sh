@@ -4,12 +4,12 @@
 cd $(cd "$(dirname "$0")";pwd)
 
 # 清理可能存在的旧临时文件
-rm -f version.txt mihomo-* mihomo-*.exe
+rm -f version.txt version.txt.* mihomo-* mihomo-*.exe
 
 # 设置错误时的清理函数
 cleanup() {
     log "检测到错误，正在清理临时文件..."
-    rm -f ./*_domain.txt ./*_Mihomo.txt version.txt mihomo-* mihomo-*.exe
+    rm -f ./*_domain.txt ./*_Mihomo.txt version.txt version.txt.* mihomo-* mihomo-*.exe
 }
 
 # 设置 trap 来捕获错误和退出信号
