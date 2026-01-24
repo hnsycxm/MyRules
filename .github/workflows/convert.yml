@@ -1,13 +1,13 @@
-name: Convert TXT to MRS  # 补充工作流名称，便于识别
+name: Convert TXT to MRS
 on:
   push:
     paths:
-      - '**.txt'  # 匹配所有目录下的txt文件
-  workflow_dispatch:  # 保留手动触发
+      - '**.txt'
+  workflow_dispatch:
 
 permissions:
   contents: write
-  actions: read       # 补充必要权限，gh cli需要
+  actions: read
   packages: read
 
 jobs:
@@ -17,75 +17,80 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 拉取完整历史，避免提交时分支信息异常
+          fetch-depth: 0
 
-      - name: Install Dependencies (gh cli)
+      - name: Install Mihomo (无需gh cli)
         run: |
-          # 原代码缺少gh cli安装步骤，ubuntu-latest默认没有
-          type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
-          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-          sudo apt update && sudo apt install gh -y
-
-      - name: Install Mihomo
-        run: |
-          # 优化：增加错误处理，避免tag获取失败导致流程中断
           set -euo pipefail
-          # 获取最新release的tag（兼容带v/不带v的情况）
-          TAG=$(gh release list --repo MetaCubeX/mihomo --limit 1 --json tagName --template '{{.tagName}}')
+          
+          # 方案1：直接通过GitHub API获取最新release的tag（无需gh cli，无需认证）
+          echo "📥 正在获取mihomo最新版本信息..."
+          TAG=$(curl -sL --retry 3 --connect-timeout 10 \
+            "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest" \
+            | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+          
+          # 兜底：如果API访问失败，使用固定版本（避免流程中断）
           if [ -z "$TAG" ]; then
-            echo "❌ 无法获取mihomo最新版本标签"
-            exit 1
+            echo "⚠️ 获取最新版本失败，使用备用版本 v1.18.1"
+            TAG="v1.18.1"
           fi
-          # 拼接下载链接（兼容不同命名格式）
-          URL="https://github.com/MetaCubeX/mihomo/releases/download/${TAG}/mihomo-linux-amd64${TAG:+-$TAG}.gz"
-          echo "正在下载mihomo: $URL"
-          # 增加curl超时和重试，提升稳定性
+          
+          # 修复下载链接格式（适配mihomo的release命名规则）
+          # 移除tag前的v（如果有），拼接正确的文件名
+          CLEAN_TAG=${TAG#v}
+          URL="https://github.com/MetaCubeX/mihomo/releases/download/${TAG}/mihomo-linux-amd64-${CLEAN_TAG}.gz"
+          echo "🔗 下载链接: $URL"
+          
+          # 下载并解压
           curl -L --retry 3 --connect-timeout 10 "$URL" -o mihomo.gz
+          if [ $? -ne 0 ]; then
+            echo "❌ 下载失败，尝试兼容格式: https://github.com/MetaCubeX/mihomo/releases/download/${TAG}/mihomo-linux-amd64.gz"
+            curl -L --retry 3 --connect-timeout 10 "https://github.com/MetaCubeX/mihomo/releases/download/${TAG}/mihomo-linux-amd64.gz" -o mihomo.gz
+          fi
+          
+          # 解压并安装
           gunzip -f mihomo.gz
           chmod +x mihomo
           sudo mv mihomo /usr/local/bin/mihomo
+          
           # 验证安装
           if ! mihomo --version; then
             echo "❌ mihomo安装失败"
             exit 1
           fi
+          echo "✅ mihomo安装成功，版本: $(mihomo --version | head -n1)"
 
       - name: Convert All TXT to MRS
         run: |
           set -euo pipefail
-          # 修复：遍历所有目录下的txt文件（匹配push的paths规则）
+          # 遍历所有目录下的txt文件
           find . -type f -name "*.txt" | while read -r file; do
             if [ ! -f "$file" ]; then
               continue
             fi
-            # 提取文件名（保留目录结构，避免同名文件冲突）
             filename="${file%.txt}"
             echo "🔄 正在处理文件: $file"
             
-            # 1. 强力清洗规则：剔除[source、空行、前缀+./+等杂质，只保留纯域名
-            # 2. 使用唯一临时文件（避免多文件时覆盖）
+            # 强力清洗规则
             temp_file="${filename}.temp_rule.txt"
             grep -v '\[source' "$file" | \
               sed 's/^+[.]\?//g' | \
               sed '/^[[:space:]]*$/d' | \
               sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > "$temp_file"
             
-            # 检查临时文件是否为空（避免编译空文件报错）
+            # 检查临时文件是否为空
             if [ ! -s "$temp_file" ]; then
               echo "⚠️ 清洗后文件为空，跳过: $file"
               rm -f "$temp_file"
               continue
             fi
             
-            # 执行编译（保留目录结构生成mrs文件）
+            # 执行编译
             if mihomo rule-set compile "$temp_file" "${filename}.mrs"; then
               echo "✅ 成功转换: ${filename}.mrs"
             else
               echo "❌ 转换失败: $file"
               rm -f "$temp_file"
-              # 注释：如果不需要终止整个流程，可将exit 1改为continue
-              # exit 1
               continue
             fi
             rm -f "$temp_file"
@@ -96,11 +101,11 @@ jobs:
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # 检查所有mrs文件是否有变动（包括子目录）
+          # 检查所有mrs文件变动
           if [ -n "$(git status --porcelain | grep '\.mrs')" ]; then
-            git add '*.mrs' **/*.mrs  # 匹配所有目录下的mrs文件
+            git add '*.mrs' **/*.mrs
             git commit -m "自动更新规则集: $(date +'%Y-%m-%d %H:%M:%S')"
-            # 推送时增加重试，避免网络问题
+            # 推送重试机制
             git push || (sleep 5 && git push)
           else
             echo "ℹ️ 没有发现 MRS 文件变动，跳过提交。"
