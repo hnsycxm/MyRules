@@ -1,4 +1,4 @@
-name: Auto Convert TXT to MRS (最终稳定版)
+name: Auto Convert TXT to MRS (终极稳定版)
 on:
   push:
     paths:
@@ -18,7 +18,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Prepare Docker Environment & Find Mihomo Path
+      - name: Prepare Docker & Find Mihomo Path (无which依赖)
         run: |
           set -e
           # 1. 检查Docker并拉取镜像
@@ -27,18 +27,40 @@ jobs:
           echo "📥 拉取metacubex/mihomo:latest镜像..."
           docker pull metacubex/mihomo:latest
           
-          # 2. 自动探测镜像内mihomo的真实路径（核心修复）
-          echo "🔍 探测镜像内mihomo的实际路径..."
-          MIHOMO_PATH=$(docker run --rm --entrypoint which metacubex/mihomo:latest mihomo)
+          # 2. 枚举mihomo的常见路径（覆盖所有可能）
+          MIHOMO_CANDIDATES=(
+            "/usr/bin/mihomo"
+            "/usr/local/bin/mihomo"
+            "/app/mihomo"
+            "/mihomo"
+            "/root/mihomo"
+            "/bin/mihomo"
+          )
+          
+          # 3. 逐个验证路径是否存在且可执行
+          MIHOMO_PATH=""
+          for PATH_CANDIDATE in "${MIHOMO_CANDIDATES[@]}"; do
+            echo "🔍 验证路径：$PATH_CANDIDATE"
+            # 在容器内检查文件是否存在且可执行
+            if docker run --rm -i metacubex/mihomo:latest test -x "$PATH_CANDIDATE"; then
+              MIHOMO_PATH="$PATH_CANDIDATE"
+              echo "✅ 找到有效mihomo路径：$MIHOMO_PATH"
+              break
+            fi
+          done
+          
+          # 4. 验证是否找到有效路径，未找到则终止并提示
           if [ -z "$MIHOMO_PATH" ]; then
-            # 兜底：尝试常见路径
-            MIHOMO_PATH="/usr/local/bin/mihomo"
-            echo "⚠️ 自动探测失败，使用兜底路径：$MIHOMO_PATH"
-          else
-            echo "✅ 找到mihomo实际路径：$MIHOMO_PATH"
+            echo "❌ 未找到镜像内的mihomo可执行文件！"
+            # 打印镜像内的文件列表，便于排查
+            echo "📄 镜像内/bin目录文件："
+            docker run --rm metacubex/mihomo:latest ls -l /bin
+            echo "📄 镜像内/usr/bin目录文件："
+            docker run --rm metacubex/mihomo:latest ls -l /usr/bin
+            exit 1
           fi
           
-          # 3. 保存路径到环境变量，供后续步骤使用
+          # 5. 保存路径到环境变量
           echo "MIHOMO_PATH=$MIHOMO_PATH" >> $GITHUB_ENV
           echo "✅ Docker环境准备完成"
 
@@ -68,7 +90,7 @@ jobs:
               continue
             fi
 
-            # 使用探测到的真实路径执行编译（核心修复）
+            # 使用验证后的路径执行编译
             echo "📝 编译为MRS文件：$mrs_file"
             docker run --rm \
               -v "$PWD:/workspace" \
