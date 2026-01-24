@@ -61,7 +61,7 @@ jobs:
             Write-Host "mihomo.exe and .mihomo_downloaded already exist."  # 如果文件已存在，跳过下载
           }
 
-      # 步骤3：转换规则集（适配 TXT 文件）
+      # 步骤3：转换规则集（修复格式参数为 txt）
       - name: Convert ruleset (TXT to MRS)
         shell: powershell
         run: |
@@ -71,17 +71,16 @@ jobs:
           if (Test-Path $exePath) {
             Write-Host "Mihomo version:"
             & $exePath -v  # 输出 mihomo 版本
-            Write-Host "Mihomo help:"
-            & $exePath convert-ruleset --help  # 输出 mihomo 帮助信息
+            Write-Host "Mihomo convert-ruleset help:"
+            & $exePath convert-ruleset --help  # 输出转换命令的帮助信息（便于排查）
 
             $maxAttempts = 5  # 定义最大重试次数
             
             for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
               try {
                 Write-Host "Attempting conversion (Attempt $attempt)..."
-                # 核心修改1：输入文件改为 adblock_reject.txt
-                # 核心修改2：输入格式从 yaml 调整为对应 TXT 的格式（根据 mihomo 支持的格式，常见为 adblock/txt，这里先以 adblock 为例）
-                & $exePath convert-ruleset domain adblock adblock_reject.txt adblock_reject.mrs  
+                # 核心修复：将 adblock 改为 txt（mihomo 支持的格式参数）
+                & $exePath convert-ruleset domain txt adblock_reject.txt adblock_reject.mrs  
                 if ($LASTEXITCODE -eq 0) {
                   Write-Host "Conversion successful (TXT to MRS)!"  # 提示 TXT 转换成功
                   break
@@ -127,11 +126,11 @@ jobs:
             }
           }
           
-          # 核心修改3：如需提交 TXT 源文件，可添加 adblock_reject.txt（可选，根据你的需求）
+          # 可选：提交 TXT 源文件（按需取舍）
           git add adblock_reject.mrs mihomo.exe .mihomo_downloaded adblock_reject.txt  
           
           if (git status --porcelain) {
-            # 核心修改4：提交信息标注 TXT 转换
+            # 提交信息标注 TXT 转换
             git commit -m "Update adblock_reject.mrs (TXT source) and add mihomo.exe"  
             
             for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
