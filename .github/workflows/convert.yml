@@ -1,66 +1,47 @@
-name: Convert Rules and Compile MRS
+name: Convert TXT to MRS
 
 on:
-  schedule:
-    - cron: '0 */6 * * *' # 每 6 小时自动运行
-  workflow_dispatch:      # 支持手动触发
-
-permissions:
-  contents: write
+  push:
+    paths:
+      - 'oktv.txt' # 仅当 oktv.txt 修改时触发
+  workflow_dispatch: # 允许手动触发
 
 jobs:
   convert:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: 'pip' # 自动缓存 Python 依赖包，加速后续运行
-
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
-          pip install yamllint --quiet # 使用 pip 安装更轻量，无需执行 apt update
+          sudo apt-get update
+          sudo apt-get install -y curl wget
 
-      - name: Cache Mihomo Binary
-        id: cache-mihomo
-        uses: actions/cache@v4
-        with:
-          path: ./mihomo
-          key: ${{ runner.os }}-mihomo-v1.18.8 # 针对版本号进行缓存
-
-      - name: Download Mihomo
-        if: steps.cache-mihomo.outputs.cache-hit != 'true'
+      - name: Download Mihomo Tool
         run: |
-          curl -L -o mihomo.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.18.8/mihomo-linux-amd64-v1.18.8.gz
-          gunzip -c mihomo.gz > mihomo
+          # 下载最新版 mihomo 核心
+          wget https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.gz
+          gunzip mihomo-linux-amd64-v1.18.3.gz
+          mv mihomo-linux-amd64-v1.18.3 mihomo
           chmod +x mihomo
 
-      - name: Process Rules and Compile
+      - name: Prepare YAML Payload
         run: |
-          # 1. 预处理数据：去除换行符，跳过注释和空行
+          # 将 +.domain.com 转换为 DOMAIN-SUFFIX,domain.com 格式
           echo "payload:" > temp_rules.yaml
-          tr -d '\r' < OKTV.txt | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -vE '^(#|$)' > cleaned.txt
+          sed 's/^+.\(.*\)/  - DOMAIN-SUFFIX,\1/' oktv.txt >> temp_rules.yaml
 
-          # 2. 转换逻辑 (合并 grep 提升效率)
-          # 处理带 +/./* 前缀的域名为 DOMAIN-SUFFIX
-          grep -E '^[+.*]+' cleaned.txt | sed 's/^[+.*]*//; s/^/  - DOMAIN-SUFFIX,/' >> temp_rules.yaml
-          # 处理不含逗号的纯域名为 DOMAIN
-          grep -vE '^[+.*]+' cleaned.txt | grep -v ',' | sed 's/^/  - DOMAIN,/' >> temp_rules.yaml
-          # 保留原本就带有格式的规则 (如 IP-CIDR, etc.)
-          grep -vE '^[+.*]+' cleaned.txt | grep ',' | sed 's/^/  - /' >> temp_rules.yaml
+      - name: Compile MRS
+        run: |
+          # 使用 mihomo 编译为 mrs 格式
+          ./mihomo rule-set compile temp_rules.yaml OKTV.mrs
 
-          # 3. 校验 YAML 格式 (宽松模式)
-          yamllint -d "{extends: relaxed, rules: {line-length: disable}}" temp_rules.yaml || { echo "YAML 严重格式错误"; exit 1; }
-
-          # 4. 编译为 MRS (显式指定输出，减少内核初始化干扰)
-          ./mihomo ruleset compile -o OKTV.mrs temp_rules.yaml || { echo "MRS 编译失败"; exit 1; }
-
-      - name: Commit and Push Changes
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Auto Update: Compiled OKTV.mrs [$(date +'%Y-%m-%d %H:%M')]"
-          file_pattern: 'OKTV.mrs' # 仅推送编译后的二进制文件，保持仓库整洁
+      - name: Commit and Push
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add OKTV.mrs
+          # 只有在文件有变动时才提交，防止报错
+          git diff --quiet && git diff --staged --quiet || git commit -m "Auto-update OKTV.mrs"
+          git push
