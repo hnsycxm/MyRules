@@ -1,47 +1,45 @@
-name: Convert TXT to MRS
+name: Generate OpenClash MRS # 脚本名称
 
 on:
   push:
     paths:
-      - 'oktv.txt' # 仅当 oktv.txt 修改时触发
-  workflow_dispatch: # 允许手动触发
+      - [cite_start]'oktv.txt' # 仅在 oktv.txt 文件变动时触发 
+  workflow_dispatch: # 允许手动点击运行
+
+permissions:
+  contents: write # 赋予 Action 写入仓库的权限，用于提交生成的 mrs 文件
 
 jobs:
-  convert:
+  build_mrs:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4 # 签出代码
 
-      - name: Install dependencies
+      - name: Install Mihomo
         run: |
-          sudo apt-get update
-          sudo apt-get install -y curl wget
+          # 修改前: 手动安装环境
+          # 修改后: 自动获取最新的 Mihomo 内核并安装
+          URL=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | grep "browser_download_url.*linux-amd64-v" | cut -d '"' -f 4 | head -n 1) # 获取下载链接
+          curl -L $URL -o mihomo.gz # 下载压缩包
+          gunzip mihomo.gz # 解压
+          chmod +x mihomo # 赋予执行权限
+          mv mihomo /usr/local/bin/ # 移动到系统路径
 
-      - name: Download Mihomo Tool
+      - name: Prepare and Compile Rule Set
         run: |
-          # 下载最新版 mihomo 核心
-          wget https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.gz
-          gunzip mihomo-linux-amd64-v1.18.3.gz
-          mv mihomo-linux-amd64-v1.18.3 mihomo
-          chmod +x mihomo
+          # 修改前: 直接尝试编译可能因格式不兼容报错
+          # 修改后: 预处理文本格式，移除行首符号并生成 mrs
+          sed 's/^+.\?//g' oktv.txt > cleaned_oktv.txt # 清理 +. 前缀以符合 Mihomo 纯域名列表规范 
+          mihomo rule-set compile cleaned_oktv.txt oktv.mrs # 执行二进制编译
+          rm cleaned_oktv.txt # 删除中间过程文件
 
-      - name: Prepare YAML Payload
+      - name: Commit and Push Changes
         run: |
-          # 将 +.domain.com 转换为 DOMAIN-SUFFIX,domain.com 格式
-          echo "payload:" > temp_rules.yaml
-          sed 's/^+.\(.*\)/  - DOMAIN-SUFFIX,\1/' oktv.txt >> temp_rules.yaml
-
-      - name: Compile MRS
-        run: |
-          # 使用 mihomo 编译为 mrs 格式
-          ./mihomo rule-set compile temp_rules.yaml OKTV.mrs
-
-      - name: Commit and Push
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add OKTV.mrs
-          # 只有在文件有变动时才提交，防止报错
-          git diff --quiet && git diff --staged --quiet || git commit -m "Auto-update OKTV.mrs"
-          git push
+          # 修改前: 仅生成文件不保存
+          # 修改后: 自动将生成的 oktv.mrs 文件提交并推送到仓库内
+          git config --local user.email "github-actions[bot]@users.noreply.github.com" # 配置 Bot 邮箱
+          git config --local user.name "github-actions[bot]" # 配置 Bot 名称
+          git add oktv.mrs # 追踪编译后的二进制文件
+          git commit -m "Auto-generate oktv.mrs from oktv.txt" || echo "No changes to commit" # 提交改动
+          git push # 推送至当前分支
