@@ -1,4 +1,4 @@
-name: Auto Convert TXT to MRS (终极稳定版)
+name: Auto Convert TXT to MRS (最终可运行版)
 on:
   push:
     paths:
@@ -18,7 +18,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Prepare Docker & Find Mihomo Path (无which依赖)
+      - name: Prepare Docker & Find Mihomo Path (强制Shell验证)
         run: |
           set -e
           # 1. 检查Docker并拉取镜像
@@ -37,27 +37,22 @@ jobs:
             "/bin/mihomo"
           )
           
-          # 3. 逐个验证路径是否存在且可执行
+          # 3. 强制进入Shell验证路径（核心修复）
           MIHOMO_PATH=""
           for PATH_CANDIDATE in "${MIHOMO_CANDIDATES[@]}"; do
             echo "🔍 验证路径：$PATH_CANDIDATE"
-            # 在容器内检查文件是否存在且可执行
-            if docker run --rm -i metacubex/mihomo:latest test -x "$PATH_CANDIDATE"; then
+            # 关键：指定ENTRYPOINT为sh，执行Shell的test命令（而非mihomo）
+            if docker run --rm --entrypoint sh metacubex/mihomo:latest -c "test -x '$PATH_CANDIDATE'"; then
               MIHOMO_PATH="$PATH_CANDIDATE"
               echo "✅ 找到有效mihomo路径：$MIHOMO_PATH"
               break
             fi
           done
           
-          # 4. 验证是否找到有效路径，未找到则终止并提示
+          # 4. 兜底：如果仍未找到，直接用镜像默认入口（已知是mihomo）
           if [ -z "$MIHOMO_PATH" ]; then
-            echo "❌ 未找到镜像内的mihomo可执行文件！"
-            # 打印镜像内的文件列表，便于排查
-            echo "📄 镜像内/bin目录文件："
-            docker run --rm metacubex/mihomo:latest ls -l /bin
-            echo "📄 镜像内/usr/bin目录文件："
-            docker run --rm metacubex/mihomo:latest ls -l /usr/bin
-            exit 1
+            echo "⚠️ 路径验证失败，使用镜像默认ENTRYPOINT（mihomo）"
+            MIHOMO_PATH="mihomo" # 直接用命令名，依赖镜像PATH
           fi
           
           # 5. 保存路径到环境变量
@@ -90,14 +85,25 @@ jobs:
               continue
             fi
 
-            # 使用验证后的路径执行编译
-            echo "📝 编译为MRS文件：$mrs_file"
-            docker run --rm \
-              -v "$PWD:/workspace" \
-              -w /workspace \
-              --entrypoint "${{ env.MIHOMO_PATH }}" \
-              metacubex/mihomo:latest \
-              rule-set compile "$temp_file" "$mrs_file"
+            # 核心修复：分两种情况执行编译
+            if [ "${{ env.MIHOMO_PATH }}" = "mihomo" ]; then
+              # 情况1：用镜像默认ENTRYPOINT，直接传参数
+              echo "📝 编译为MRS文件：$mrs_file"
+              docker run --rm \
+                -v "$PWD:/workspace" \
+                -w /workspace \
+                metacubex/mihomo:latest \
+                rule-set compile "$temp_file" "$mrs_file"
+            else
+              # 情况2：用具体路径，指定ENTRYPOINT
+              echo "📝 编译为MRS文件：$mrs_file"
+              docker run --rm \
+                -v "$PWD:/workspace" \
+                -w /workspace \
+                --entrypoint "${{ env.MIHOMO_PATH }}" \
+                metacubex/mihomo:latest \
+                rule-set compile "$temp_file" "$mrs_file"
+            fi
 
             # 验证生成结果
             if [ -f "$mrs_file" ]; then
