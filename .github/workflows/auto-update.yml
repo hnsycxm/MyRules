@@ -5,55 +5,53 @@ on:
       - 'txt/**'
     branches: [ main ]
   schedule:
-    # 每天北京时间上午 8:00 运行 (UTC 时间 00:00)
-    - cron: '0 0 * * *'
+    - cron: '0 0 * * *' # 每天北京时间 8:00
   workflow_dispatch:
     inputs:
       reason:
-        description: 'Trigger reason for manual run'
-        required: false
+        description: 'Trigger reason'
         default: 'Manual trigger'
-        type: string
 
 env:
   TZ: Asia/Shanghai
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   Update_Filters:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      actions: write
     
     steps:
-      # Checkout the repository
-      - uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      # Run build script
-      - name: Built Rules
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Get Mihomo Version
+        id: get_version
         run: |
-          bash ./script/build-combined-rules.sh
-      
-      # Commit and push changes if detected
-      - name: Commit Changes
-        id: commit
-        uses: stefanzweifel/git-auto-commit-action@v4
-        with:
-          commit_message: 🚀 CI Updated
+          version=$(curl -sL https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt)
+          echo "version=$version" >> $GITHUB_OUTPUT
 
-      - name: GitHub Push
-        if: steps.commit.outputs.changes_detected == 'true'
-        uses: ad-m/github-push-action@master
+      - name: Cache Mihomo Tool
+        id: cache-mihomo
+        uses: actions/cache@v3
         with:
-          github_token: ${{secrets.GITHUB_TOKEN}}
-          branch: ${{github.ref}}
+          path: script/mihomo-linux-amd64-${{ steps.get_version.outputs.version }}
+          key: mihomo-${{ steps.get_version.outputs.version }}
 
-      # Optional: Delete old workflow runs to save storage
-      - name: Delete old workflow runs
-        uses: Mattraks/delete-workflow-runs@v2
-        if: ${{ github.event_name != 'schedule' }}
+      - name: Build Rules
+        run: bash ./script/build-combined-rules.sh
+
+      - name: Commit & Push Changes
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
-          retain_days: 30
-          keep_minimum_runs: 6
+          commit_message: "🚀 CI: Updated Rules (${{ steps.get_version.outputs.version }})"
+          file_pattern: "*.mrs"
