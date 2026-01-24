@@ -1,11 +1,11 @@
-"on": # 使用引号包裹关键词，防止解析器错误识别
+"on":
   push:
     paths:
-      - '**.txt' # 监听仓库内所有 .txt 文件的变动
-  workflow_dispatch: # 支持手动运行
+      - '**.txt'
+  workflow_dispatch:
 
 permissions:
-  contents: write # 必须：授予 Action 推送代码到仓库的权限
+  contents: write
 
 jobs:
   convert_job:
@@ -13,32 +13,36 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # 获取完整历史以确保能正确提交
 
       - name: Install Mihomo
         run: |
-          # 获取最新版 Mihomo 下载链接
-          URL=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | grep "browser_download_url.*linux-amd64-v" | cut -d '"' -f 4 | head -n 1)
-          curl -L $URL -o mihomo.gz
-          gunzip mihomo.gz
+          # 使用 GitHub CLI 获取下载地址，避免 API 频率限制报错
+          TAG=$(gh release view --repo MetaCubeX/mihomo --json tagName --template '{{.tagName}}')
+          URL="https://github.com/MetaCubeX/mihomo/releases/download/${TAG}/mihomo-linux-amd64-${TAG}.gz"
+          echo "正在下载: $URL"
+          curl -L "$URL" -o mihomo.gz
+          gunzip -f mihomo.gz
           chmod +x mihomo
           sudo mv mihomo /usr/local/bin/mihomo
 
       - name: Convert All TXT to MRS
         run: |
-          # 遍历仓库中所有的 .txt 文件并进行转换
           for file in *.txt; do
             if [ -f "$file" ]; then
               filename="${file%.*}"
-              echo "正在转换: $file -> ${filename}.mrs"
+              echo "正在处理: $file"
               
-              # 预处理：移除 +. 前缀（适配 OpenClash 纯域名规则集要求）
-              sed 's/^+.\?//g' "$file" > temp_rule.txt
+              # 修改前：只删除了 +.
+              # 修改后：增加强力清洗，剔除 等杂质，只保留纯域名格式
+              grep -v '\[source' "$file" | sed 's/^+.\?//g' | sed '/^$/d' > temp_rule.txt
               
-              # 编译为二进制 mrs
-              mihomo rule-set compile temp_rule.txt "${filename}.mrs"
-              
+              # 执行编译
+              if mihomo rule-set compile temp_rule.txt "${filename}.mrs"; then
+                echo "✅ 成功转换: ${filename}.mrs"
+              else
+                echo "❌ 转换失败: $file"
+                exit 1
+              fi
               rm temp_rule.txt
             fi
           done
@@ -48,11 +52,10 @@ jobs:
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # 检查是否有文件变动，避免空提交报错
-          if [ -n "$(git status --porcelain)" ]; then
+          if [ -n "$(git status --porcelain *.mrs)" ]; then
             git add *.mrs
-            git commit -m "Auto-update MRS rules: $(date +'%Y-%m-%d %H:%M')"
+            git commit -m "自动更新规则集: $(date +'%Y-%m-%d %H:%M')"
             git push
           else
-            echo "没有发现 mrs 文件更新，跳过提交。"
+            echo "没有发现 MRS 文件变动，跳过提交。"
           fi
