@@ -1,4 +1,4 @@
-name: Process Local Rules
+name: Auto Update Rules
 on:
   push:
     paths-ignore:
@@ -7,7 +7,16 @@ on:
       - 'LICENSE'
       - 'rules/**'
     branches: [ main ]
+  schedule:
+    # 每天北京时间上午 8:00 运行 (UTC 时间 00:00)
+    - cron: '0 0 * * *'
   workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Trigger reason for manual run'
+        required: false
+        default: 'Manual trigger'
+        type: string
 
 env:
   TZ: Asia/Shanghai
@@ -42,11 +51,12 @@ jobs:
           github_token: ${{secrets.GITHUB_TOKEN}}
           branch: ${{github.ref}}
 
-      # Delete old workflow runs
-      - name: Delete workflow runs
-        uses: Mattraks/delete-workflow-runs@main
+      # Optional: Delete old workflow runs to save storage
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        if: ${{ github.event_name != 'schedule' }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          retain_days: 0
-          keep_minimum_runs: 1
+          retain_days: 30
+          keep_minimum_runs: 6

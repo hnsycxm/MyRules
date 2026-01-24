@@ -22,7 +22,7 @@ process_rules() {
     local script=$3
     local domain_file="${name}_domain.txt"
     local mihomo_txt_file="${name}_Mihomo.txt"
-    local mihomo_mrs_file="${mihomo_txt_file%.txt}.mrs"
+    local mihomo_mrs_file="${name}.mrs"
 
     log "开始处理规则: $name"
     
@@ -58,7 +58,7 @@ process_rules() {
 
     # 将生成的 .mrs 文件移动到上级目录
     mv "$mihomo_mrs_file" "../$mihomo_mrs_file"
-    log "已将生成文件移动到对应目录猢狲: $mihomo_mrs_file"
+    log "已将生成文件移动到上级目录: $mihomo_mrs_file"
     
     # 删除中间的 Mihomo 格式文本文件，只保留原始输入文件
     rm -f "../txt/$mihomo_txt_file"
@@ -94,24 +94,21 @@ setup_mihomo_tool() {
             ;;
     esac
     
-    # 根据操作系统选择合适的 Mihomo 版本
-    if [ "$mihomo_os" = "windows" ]; then
-        # Windows 系统使用 curl 下载版本信息
-        curl -s -L -o version.txt https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt
-    else
-        wget -q https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt
-    fi
+    # 使用固定版本名称，不依赖版本信息
+    version="latest"
     
-    if [ $? -ne 0 ]; then
-        error "下载版本文件失败"
-        exit 1
-    fi
-
-    version=$(cat version.txt)
-    
+    # 使用通用的工具名称，避免版本依赖
     if [ "$mihomo_os" = "windows" ]; then
-        mihomo_tool="mihomo-windows-amd64-$version.exe"
-        curl -s -L -o "$mihomo_tool" "https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/$mihomo_tool.gz"
+        mihomo_tool="mihomo-windows-amd64.exe"
+        # 尝试下载预编译的最新版本
+        if command -v curl >/dev/null 2>&1; then
+            curl -s -L -o "$mihomo_tool.gz" "https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-$mihomo_os-amd64.exe.gz"
+        elif command -v wget >/dev/null 2>&1; then
+            wget -q -O "$mihomo_tool.gz" "https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-$mihomo_os-amd64.exe.gz"
+        else
+            error "系统缺少curl或wget命令"
+            exit 1
+        fi
         if [ $? -ne 0 ]; then
             error "下载 Mihomo 工具失败"
             exit 1
@@ -119,13 +116,20 @@ setup_mihomo_tool() {
         gunzip "$mihomo_tool.gz"
         chmod +x "$mihomo_tool"
     else
-        mihomo_tool="mihomo-$mihomo_os-amd64-$version"
-        wget -q "https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/$mihomo_tool.gz"
+        mihomo_tool="mihomo-$mihomo_os-amd64"
+        # 尝试下载预编译的最新版本
+        if command -v wget >/dev/null 2>&1; then
+            wget -q -O "$mihomo_tool.gz" "https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-$mihomo_os-amd64.gz"
+        elif command -v curl >/dev/null 2>&1; then
+            curl -s -L -o "$mihomo_tool.gz" "https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-$mihomo_os-amd64.gz"
+        else
+            error "系统缺少curl或wget命令"
+            exit 1
+        fi
         if [ $? -ne 0 ]; then
             error "下载 Mihomo 工具失败"
             exit 1
         fi
-
         gzip -d "$mihomo_tool.gz"
         chmod +x "$mihomo_tool"
     fi

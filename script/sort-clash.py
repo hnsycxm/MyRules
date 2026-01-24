@@ -1,6 +1,8 @@
 import sys
 import re
 import asyncio
+import os
+from pathlib import Path
 
 def extract_domain(line):
     """
@@ -18,12 +20,16 @@ def extract_domain(line):
     if line.startswith('+.'):
         domain = line[2:].strip()
     elif line.startswith('- \\') or line.startswith('  - \\'):
-        domain = line.strip('- \\').strip()
+        domain = line.lstrip('- \\').lstrip().rstrip('\\').rstrip()
     elif '.' in line and not line.startswith('+'):
         domain = line.strip()
     else:
         return None
-    return domain
+    
+    # 验证域名格式
+    if domain and is_valid_domain(domain):
+        return domain
+    return None
 
 def get_parent_domain(domain):
     """
@@ -56,6 +62,23 @@ async def read_lines(file_path):
                 break
             yield lines
 
+def is_valid_domain(domain):
+    """
+    验证域名格式是否有效
+    """
+    if not domain or len(domain) > 253:
+        return False
+    
+    # 域名标签最大长度为63个字符
+    labels = domain.split('.')
+    if any(len(label) > 63 for label in labels):
+        return False
+    
+    # 检查域名格式
+    pattern = re.compile(r'^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$')
+    return bool(pattern.match(domain))
+
+
 def remove_subdomains(domains):
     """
     移除子域名，只保留父域名
@@ -73,25 +96,39 @@ async def main():
         return
 
     file_name = sys.argv[1]
+    
+    # 检查文件是否存在
+    if not os.path.exists(file_name):
+        print(f"错误：文件 {file_name} 不存在")
+        return
+    
+    if not os.path.isfile(file_name):
+        print(f"错误：{file_name} 不是一个有效的文件")
+        return
 
-    # 按块处理文件
-    domains = set()
+    try:
+        # 按块处理文件
+        domains = set()
 
-    async for chunk in read_lines(file_name):
-        chunk_domains = await process_chunk(chunk)
-        domains.update(chunk_domains)
+        async for chunk in read_lines(file_name):
+            chunk_domains = await process_chunk(chunk)
+            domains.update(chunk_domains)
 
-    # 移除子域名，保留父域名
-    filtered_domains = remove_subdomains(domains)
+        # 移除子域名，保留父域名
+        filtered_domains = remove_subdomains(domains)
 
-    # 排序规则：按父域名和子域名排序
-    sorted_domains = sorted(filtered_domains)
+        # 排序规则：按父域名和子域名排序
+        sorted_domains = sorted(filtered_domains)
 
-    # 写入文件
-    with open(file_name, 'w', encoding='utf8') as f:
-        f.writelines(f"{domain}\n" for domain in sorted_domains)
+        # 写入文件
+        with open(file_name, 'w', encoding='utf8') as f:
+            f.writelines(f"{domain}\n" for domain in sorted_domains)
 
-    print(f"处理完成，生成的规则总数为：{len(sorted_domains)}")
+        print(f"处理完成，生成的规则总数为：{len(sorted_domains)}")
+    except IOError as e:
+        print(f"文件操作错误: {e}")
+    except Exception as e:
+        print(f"处理过程中发生错误: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())
