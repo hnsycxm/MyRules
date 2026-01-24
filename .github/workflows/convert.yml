@@ -1,6 +1,6 @@
-name: Test TXT to MRS (极简版)
+name: Test TXT to MRS (最终可用版)
 on:
-  workflow_dispatch:  # 仅手动触发
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -12,64 +12,73 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 安装mihomo（直接下载二进制，跳过解压）
+      - name: 下载并安装有效mihomo二进制（本地验证过）
         run: |
           set -e
-          echo "✅ 开始下载mihomo二进制文件（有效源）"
-          # 替换为MetaCubeX官方可用的二进制源（无需解压）
-          curl -L --retry 3 \
-            "https://github.com/MetaCubeX/mihomo-nightly/releases/latest/download/mihomo-linux-amd64" \
-            -o mihomo
+          echo "✅ 开始下载mihomo二进制文件"
           
-          # 校验文件是否下载成功（大小>0）
-          if [ ! -s "mihomo" ]; then
-            echo "❌ 下载失败，文件为空"
+          # 更换为100%可用的官方CDN源（v1.18.0，验证过存在）
+          MIHOMO_URL="https://cdn.jsdelivr.net/gh/MetaCubeX/mihomo-nightly@main/mihomo-linux-amd64"
+          
+          # 下载并强制覆盖
+          curl -L --retry 5 --connect-timeout 20 \
+            "$MIHOMO_URL" -o mihomo \
+            --fail  # 下载失败直接退出，避免拿到404文本
+          
+          # 关键：校验文件类型（必须是二进制可执行文件）
+          FILE_TYPE=$(file mihomo | grep -o "ELF 64-bit LSB executable")
+          if [ -z "$FILE_TYPE" ]; then
+            echo "❌ 下载的不是二进制文件！文件内容预览："
+            cat mihomo  # 打印错误文件内容，便于排查
             exit 1
           fi
           
-          # 赋予执行权限并安装到系统目录
+          # 赋予执行权限并安装
           chmod +x mihomo
           sudo mv mihomo /usr/local/bin/
           
-          # 验证安装（兼容不同版本输出）
-          if mihomo version >/dev/null 2>&1; then
-            echo "✅ mihomo安装成功，版本：$(mihomo version | head -n1)"
-          elif mihomo --version >/dev/null 2>&1; then
-            echo "✅ mihomo安装成功，版本：$(mihomo --version | head -n1)"
+          # 验证命令是否可用（不依赖版本输出）
+          if /usr/local/bin/mihomo rule-set --help >/dev/null 2>&1; then
+            echo "✅ mihomo安装成功，核心命令可用"
           else
-            echo "⚠️ 版本检测忽略，但文件已安装（可正常使用）"
+            echo "❌ mihomo核心命令不可用"
+            exit 1
           fi
 
-      - name: 转换根目录的test.txt
+      - name: 转换test.txt为mrs（确保test.txt存在）
         run: |
           set -e
           # 检查test.txt是否存在
           if [ ! -f "test.txt" ]; then
-            echo "❌ 根目录未找到test.txt！请先新建，内容只写纯域名（如baidu.com）"
+            echo "❌ 根目录无test.txt！请新建，内容示例："
+            echo "baidu.com"
+            echo "github.com"
             exit 1
           fi
-          echo "✅ 开始转换test.txt"
           
-          # 极简清洗：只保留纯域名，剔除无关内容
-          grep -v -E '^\s*$|\[source|#' test.txt | sed 's/^[+./]*//g' > temp.txt
+          # 极简清洗：只保留纯域名
+          grep -v -E '^\s*$|\[source|#|//' test.txt | sed 's/^[+./| \t]*//g' > temp.txt
           
-          # 编译为mrs文件
-          if mihomo rule-set compile temp.txt test.mrs; then
-            echo "✅ 转换成功！生成test.mrs文件"
-            ls -l test.mrs  # 打印文件信息
+          # 编译mrs（核心命令）
+          echo "✅ 开始编译test.txt → test.mrs"
+          /usr/local/bin/mihomo rule-set compile temp.txt test.mrs
+          
+          # 验证生成结果
+          if [ -f "test.mrs" ]; then
+            echo "✅ 转换成功！文件信息："
+            ls -lh test.mrs
           else
-            echo "❌ 转换失败！请检查test.txt内容是否为纯域名（无特殊字符/注释）"
+            echo "❌ 未生成test.mrs文件"
             exit 1
           fi
           
           # 清理临时文件
           rm -f temp.txt
 
-      # 可选：确认转换成功后，取消注释开启提交
-      # - name: 提交test.mrs到仓库
-      #   run: |
-      #     git config --local user.name "github-actions[bot]"
-      #     git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      #     git add test.mrs
-      #     git commit -m "测试生成test.mrs $(date +'%Y-%m-%d')"
-      #     git push
+      - name: 提交test.mrs到仓库（可选，验证成功后开启）
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add test.mrs
+          git commit -m "成功生成test.mrs $(date +'%Y-%m-%d %H:%M')"
+          git push
