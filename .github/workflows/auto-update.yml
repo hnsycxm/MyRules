@@ -2,57 +2,58 @@ name: Auto Update Rules
 on:
   push:
     paths:
-      - [cite_start]'txt/**' [cite: 1]
-    [cite_start]branches: [ main ] [cite: 1]
+      - 'txt/**'
+    branches: [ main ]
   schedule:
-    - [cite_start]cron: '0 0 * * *' [cite: 1]
+    # 每天北京时间上午 8:00 运行 (UTC 时间 00:00)
+    - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
       reason:
-        description: 'Trigger reason'
+        description: 'Trigger reason for manual run'
+        required: false
         default: 'Manual trigger'
+        type: string
 
 env:
-  [cite_start]TZ: Asia/Shanghai [cite: 1]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  TZ: Asia/Shanghai
 
 jobs:
   Update_Filters:
     runs-on: ubuntu-latest
     permissions:
-      [cite_start]contents: write [cite: 1]
+      contents: write
+      actions: write
     
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      # Checkout the repository
+      - uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
-      - name: Get Mihomo Version
-        id: get_version
+      # Run build script
+      - name: Built Rules
         run: |
-          version=$(curl -sL https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt)
-          echo "version=$version" >> $GITHUB_OUTPUT
-
-      - name: Cache Mihomo Tool
-        id: cache-mihomo
-        uses: actions/cache@v3
+          bash ./script/build-combined-rules.sh
+      
+      # Commit and push changes if detected
+      - name: Commit Changes
+        id: commit
+        uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          # 修复点：使用通配符确保匹配到下载的文件
-          path: script/mihomo-*
-          key: mihomo-${{ steps.get_version.outputs.version }}
+          commit_message: 🚀 CI Updated
 
-      - name: Build Rules
-        run: bash ./script/build-combined-rules.sh
-
-      - name: Commit & Push Changes
-        uses: stefanzweifel/git-auto-commit-action@v5
+      - name: GitHub Push
+        if: steps.commit.outputs.changes_detected == 'true'
+        uses: ad-m/github-push-action@master
         with:
-          commit_message: "🚀 CI: Updated Rules (${{ steps.get_version.outputs.version }})"
-          file_pattern: "*.mrs"
+          github_token: ${{secrets.GITHUB_TOKEN}}
+          branch: ${{github.ref}}
+
+      # Optional: Delete old workflow runs to save storage
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        if: ${{ github.event_name != 'schedule' }}
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          retain_days: 30
+          keep_minimum_runs: 6
