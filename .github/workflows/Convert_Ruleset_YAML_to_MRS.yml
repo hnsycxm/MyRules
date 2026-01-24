@@ -1,5 +1,5 @@
 # 工作流程名称
-name: Convert_Ruleset_YAML_to_MRS
+name: Convert_Ruleset_TXT_to_MRS
 
 # 触发条件
 on:
@@ -61,8 +61,8 @@ jobs:
             Write-Host "mihomo.exe and .mihomo_downloaded already exist."  # 如果文件已存在，跳过下载
           }
 
-      # 步骤3：转换规则集（依赖于 mihomo.exe）
-      - name: Convert ruleset
+      # 步骤3：转换规则集（适配 TXT 文件）
+      - name: Convert ruleset (TXT to MRS)
         shell: powershell
         run: |
           $exePath = "./mihomo.exe"  # 定义 mihomo.exe 的路径
@@ -79,9 +79,11 @@ jobs:
             for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
               try {
                 Write-Host "Attempting conversion (Attempt $attempt)..."
-                & $exePath convert-ruleset domain yaml adblock_reject.yaml adblock_reject.mrs  # 尝试转换规则集
+                # 核心修改1：输入文件改为 adblock_reject.txt
+                # 核心修改2：输入格式从 yaml 调整为对应 TXT 的格式（根据 mihomo 支持的格式，常见为 adblock/txt，这里先以 adblock 为例）
+                & $exePath convert-ruleset domain adblock adblock_reject.txt adblock_reject.mrs  
                 if ($LASTEXITCODE -eq 0) {
-                  Write-Host "Conversion successful!"  # 如果成功，输出成功信息
+                  Write-Host "Conversion successful (TXT to MRS)!"  # 提示 TXT 转换成功
                   break
                 } else {
                   throw "Conversion failed with exit code $LASTEXITCODE"  # 如果失败，抛出异常
@@ -100,7 +102,7 @@ jobs:
             exit 1
           }
 
-      # 步骤4：提交并推送更改（包括 mihomo.exe 和标记文件）
+      # 步骤4：提交并推送更改（包含 TXT 源文件可选）
       - name: Push changes
         shell: powershell
         env:
@@ -125,16 +127,18 @@ jobs:
             }
           }
           
-          git add adblock_reject.mrs mihomo.exe .mihomo_downloaded  # 添加转换后的文件和 mihomo.exe 以及标记文件到 Git
+          # 核心修改3：如需提交 TXT 源文件，可添加 adblock_reject.txt（可选，根据你的需求）
+          git add adblock_reject.mrs mihomo.exe .mihomo_downloaded adblock_reject.txt  
           
           if (git status --porcelain) {
-            git commit -m "Update adblock_reject.mrs and add mihomo.exe"  # 如果有更改，进行提交
+            # 核心修改4：提交信息标注 TXT 转换
+            git commit -m "Update adblock_reject.mrs (TXT source) and add mihomo.exe"  
             
             for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
               try {
                 Write-Host "Attempting to push changes (Attempt $attempt of $maxAttempts)..."
                 git push https://${{ secrets.TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }} --force  # 强制推送更改
-                Write-Host "Changes successfully pushed."  # 如果成功，输出成功信息
+                Write-Host "Changes successfully pushed (TXT to MRS update)!"  # 提示推送成功
                 break
               } catch {
                 Write-Host "Push attempt $attempt failed. Error: $_"  # 捕获异常并输出错误信息
@@ -146,5 +150,5 @@ jobs:
               }
             }
           } else {
-            Write-Host "No changes to commit."  # 如果没有更改，输出无更改信息
+            Write-Host "No changes to commit (TXT source no update)."  # 提示无 TXT 相关更改
           }
