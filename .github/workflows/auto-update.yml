@@ -2,10 +2,10 @@ name: Auto Update Rules
 on:
   push:
     paths:
-      - 'txt/**'
-    branches: [ main ]
+      - [cite_start]'txt/**' [cite: 1]
+    [cite_start]branches: [ main ] [cite: 1]
   schedule:
-    - cron: '0 0 * * *' # 每天北京时间 8:00
+    - [cite_start]cron: '0 0 * * *' [cite: 1]
   workflow_dispatch:
     inputs:
       reason:
@@ -13,7 +13,7 @@ on:
         default: 'Manual trigger'
 
 env:
-  TZ: Asia/Shanghai
+  [cite_start]TZ: Asia/Shanghai [cite: 1]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,7 +23,7 @@ jobs:
   Update_Filters:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      [cite_start]contents: write [cite: 1]
     
     steps:
       - name: Checkout Repository
@@ -44,7 +44,8 @@ jobs:
         id: cache-mihomo
         uses: actions/cache@v3
         with:
-          path: script/mihomo-linux-amd64-${{ steps.get_version.outputs.version }}
+          # 修复点：使用通配符确保匹配到下载的文件
+          path: script/mihomo-*
           key: mihomo-${{ steps.get_version.outputs.version }}
 
       - name: Build Rules
