@@ -1,4 +1,4 @@
-name: Auto Convert TXT to MRS
+name: Auto Convert TXT to MRS (最终稳定版)
 on:
   push:
     paths:
@@ -18,14 +18,29 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Prepare Docker Environment
+      - name: Prepare Docker Environment & Find Mihomo Path
         run: |
           set -e
+          # 1. 检查Docker并拉取镜像
           echo "🔍 检查Docker版本..."
           docker --version
           echo "📥 拉取metacubex/mihomo:latest镜像..."
           docker pull metacubex/mihomo:latest
-          echo "✅ Docker环境和镜像准备完成"
+          
+          # 2. 自动探测镜像内mihomo的真实路径（核心修复）
+          echo "🔍 探测镜像内mihomo的实际路径..."
+          MIHOMO_PATH=$(docker run --rm --entrypoint which metacubex/mihomo:latest mihomo)
+          if [ -z "$MIHOMO_PATH" ]; then
+            # 兜底：尝试常见路径
+            MIHOMO_PATH="/usr/local/bin/mihomo"
+            echo "⚠️ 自动探测失败，使用兜底路径：$MIHOMO_PATH"
+          else
+            echo "✅ 找到mihomo实际路径：$MIHOMO_PATH"
+          fi
+          
+          # 3. 保存路径到环境变量，供后续步骤使用
+          echo "MIHOMO_PATH=$MIHOMO_PATH" >> $GITHUB_ENV
+          echo "✅ Docker环境准备完成"
 
       - name: Convert All TXT Files to MRS
         run: |
@@ -53,12 +68,12 @@ jobs:
               continue
             fi
 
-            # 修复后的Docker编译命令
+            # 使用探测到的真实路径执行编译（核心修复）
             echo "📝 编译为MRS文件：$mrs_file"
             docker run --rm \
               -v "$PWD:/workspace" \
               -w /workspace \
-              --entrypoint /app/mihomo \
+              --entrypoint "${{ env.MIHOMO_PATH }}" \
               metacubex/mihomo:latest \
               rule-set compile "$temp_file" "$mrs_file"
 
