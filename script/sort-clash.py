@@ -4,11 +4,11 @@ import asyncio
 import os
 import ipaddress
 
-# 严格的域名正则表达式
+# RFC 标准域名正则表达式
 DOMAIN_PATTERN = re.compile(r'^([a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$', re.IGNORECASE)
 
 def is_ip(address):
-    """检测是否为 IP 地址以进行剔除"""
+    """剔除 IP 地址，防止 MRS 编译失败"""
     try:
         ipaddress.ip_address(address)
         return True
@@ -16,12 +16,12 @@ def is_ip(address):
         return False
 
 def extract_domain(line):
-    """提取并规范化域名条目"""
+    """清洗并提取核心域名"""
     line = line.strip()
     if not line or line.startswith(('#', '!', '//')) or 'regexp' in line:
         return None
     
-    # 移除前缀 (如 DOMAIN, 或 +.)
+    # 兼容多种格式：DOMAIN, / +. / - / payload:
     clean = re.sub(r'^(DOMAIN(-SUFFIX|-KEYWORD)?|IP-CIDR6?|payload:|\+\.|-\s+|[\s\-\\]+)', '', line, flags=re.IGNORECASE)
     domain = clean.split('#')[0].split()[0].strip().strip('.').lower()
 
@@ -30,9 +30,9 @@ def extract_domain(line):
     return None
 
 def remove_subdomains(domains):
-    """通过层级排序高效合并子域名"""
+    """基于层级倒序的子域名合并算法"""
     if not domains: return set()
-    # 核心：按域名层级倒序排列，如 ['example.com', 'www.example.com']
+    # 按域名层级分割后倒序排序
     sorted_domains = sorted(domains, key=lambda d: d.split('.')[::-1])
     
     result = []
