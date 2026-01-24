@@ -5,7 +5,6 @@
 +.kstore.vip
 +.picbf.com
 +.hezids.com
-+.skyworthdigitaliot.com
 +.bakstotre.com
 +.coocaa.com
 +.jialanling.com

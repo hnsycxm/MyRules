@@ -1,11 +1,8 @@
 name: Auto Update Rules
 on:
   push:
-    paths-ignore:
-      - 'README.md'
-      - '.github/**'
-      - 'LICENSE'
-      - 'rules/**'
+    paths:
+      - 'txt/**'
     branches: [ main ]
   schedule:
     # 每天北京时间上午 8:00 运行 (UTC 时间 00:00)

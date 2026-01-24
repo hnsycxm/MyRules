@@ -3,6 +3,18 @@
 # 切换到脚本所在目录
 cd $(cd "$(dirname "$0")";pwd)
 
+# 清理可能存在的旧临时文件
+rm -f version.txt mihomo-* mihomo-*.exe
+
+# 设置错误时的清理函数
+cleanup() {
+    log "检测到错误，正在清理临时文件..."
+    rm -f ./*_domain.txt ./*_Mihomo.txt version.txt mihomo-* mihomo-*.exe
+}
+
+# 设置 trap 来捕获错误和退出信号
+trap cleanup ERR EXIT INT TERM
+
 # 定义日志函数
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] $@"
@@ -40,7 +52,21 @@ process_rules() {
     sed -i 's/\r//' "$domain_file"
     log "已修复换行符: $domain_file"
 
-    python "$script" "$domain_file"
+    if command -v python &> /dev/null; then
+        python "$script" "$domain_file"
+    elif command -v python3 &> /dev/null; then
+        python3 "$script" "$domain_file"
+    elif [ -f "/c/Users/Admin/AppData/Local/Programs/Python/Python314/python.exe" ]; then
+        "/c/Users/Admin/AppData/Local/Programs/Python/Python314/python.exe" "$script" "$domain_file"
+    elif [ -x "/c/Python3*/python.exe" ]; then
+        "/c/Python3*/python.exe" "$script" "$domain_file"
+    elif [ -x "$HOME/AppData/Local/Programs/Python/Python*/python.exe" ]; then
+        "$HOME/AppData/Local/Programs/Python/Python*/python.exe" "$script" "$domain_file"
+    else
+        error "未找到 Python 解释器，请安装 Python 并确保其在 PATH 中"
+        return 1
+    fi
+    
     if [ $? -ne 0 ]; then
         error "Python 脚本执行失败: $script"
         return 1
@@ -61,7 +87,7 @@ process_rules() {
     log "已将生成文件移动到上级目录: $mihomo_mrs_file"
     
     # 删除中间的 Mihomo 格式文本文件，只保留原始输入文件
-    rm -f "../txt/$mihomo_txt_file"
+    rm -f "$mihomo_txt_file"
     log "已删除中间 Mihomo 格式文本文件: $mihomo_txt_file"
 }
 
@@ -94,42 +120,69 @@ setup_mihomo_tool() {
             ;;
     esac
     
-    # 使用固定版本名称，不依赖版本信息
-    version="latest"
-    
-    # 使用通用的工具名称，避免版本依赖
+    # 根据操作系统选择合适的 Mihomo 版本
     if [ "$mihomo_os" = "windows" ]; then
-        mihomo_tool="mihomo-windows-amd64.exe"
-        # 尝试下载预编译的最新版本
-        if command -v curl >/dev/null 2>&1; then
-            curl -s -L -o "$mihomo_tool.gz" "https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-$mihomo_os-amd64.exe.gz"
-        elif command -v wget >/dev/null 2>&1; then
-            wget -q -O "$mihomo_tool.gz" "https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-$mihomo_os-amd64.exe.gz"
-        else
-            error "系统缺少curl或wget命令"
-            exit 1
-        fi
+        # Windows 系统使用 curl 下载版本信息
+        curl -s -L -o version.txt https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt
+    else
+        wget -q https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt
+    fi
+    
+    if [ $? -ne 0 ]; then
+        error "下载版本文件失败"
+        exit 1
+    fi
+
+    version=$(cat version.txt)
+    
+    if [ "$mihomo_os" = "windows" ]; then
+        mihomo_tool="mihomo-windows-amd64-$version.exe"
+        expected_mihomo_tool="mihomo-windows-amd64.exe"
+        mihomo_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/mihomo-windows-amd64-$version.zip"
+        curl -s -L -o "$mihomo_tool.zip" "$mihomo_url"
         if [ $? -ne 0 ]; then
-            error "下载 Mihomo 工具失败"
-            exit 1
+            # 如果 zip 下载失败，尝试使用 .gz 格式
+            mihomo_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/$mihomo_tool.gz"
+            curl -s -L -o "$mihomo_tool.gz" "$mihomo_url"
+            if [ $? -ne 0 ]; then
+                error "下载 Mihomo 工具失败"
+                exit 1
+            fi
+            # 检查系统是否支持 gunzip
+            if command -v gunzip &> /dev/null; then
+                gunzip "$mihomo_tool.gz"
+                # 重命名解压后的文件以匹配预期名称
+                if [ -f "$expected_mihomo_tool" ] && [ ! -f "$mihomo_tool" ]; then
+                    mv "$expected_mihomo_tool" "$mihomo_tool"
+                fi
+            else
+                # 如果没有 gunzip，尝试使用系统自带的解压方法
+                error "未找到 gunzip 命令，无法解压 Mihomo 工具"
+                exit 1
+            fi
+        else
+            # 解压 zip 文件
+            if command -v unzip &> /dev/null; then
+                unzip -o "$mihomo_tool.zip"
+                # 重命名解压后的文件以匹配预期名称
+                if [ -f "$expected_mihomo_tool" ] && [ ! -f "$mihomo_tool" ]; then
+                    mv "$expected_mihomo_tool" "$mihomo_tool"
+                fi
+                rm -f "$mihomo_tool.zip"
+            else
+                error "未找到 unzip 命令，无法解压 Mihomo 工具 zip 文件"
+                exit 1
+            fi
         fi
-        gunzip "$mihomo_tool.gz"
         chmod +x "$mihomo_tool"
     else
-        mihomo_tool="mihomo-$mihomo_os-amd64"
-        # 尝试下载预编译的最新版本
-        if command -v wget >/dev/null 2>&1; then
-            wget -q -O "$mihomo_tool.gz" "https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-$mihomo_os-amd64.gz"
-        elif command -v curl >/dev/null 2>&1; then
-            curl -s -L -o "$mihomo_tool.gz" "https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-$mihomo_os-amd64.gz"
-        else
-            error "系统缺少curl或wget命令"
-            exit 1
-        fi
+        mihomo_tool="mihomo-$mihomo_os-amd64-$version"
+        wget -q "https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/$mihomo_tool.gz"
         if [ $? -ne 0 ]; then
             error "下载 Mihomo 工具失败"
             exit 1
         fi
+
         gzip -d "$mihomo_tool.gz"
         chmod +x "$mihomo_tool"
     fi
@@ -155,6 +208,4 @@ done
 # 等待所有规则并行处理完成
 wait
 
-# 清理缓存文件
-rm -rf ./*_domain.txt "$mihomo_tool"
-log "脚本执行完成，已清理临时文件"
+log "脚本执行完成，临时文件将在退出时自动清理"
