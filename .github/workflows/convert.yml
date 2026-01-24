@@ -1,149 +1,70 @@
-name: Auto Convert TXT to MRS (最终可运行版)
+name: Auto Convert TXT to MRS (极简不超时版)
 on:
+  workflow_dispatch:  # 仅手动触发，避免自动超时
   push:
     paths:
       - '**.txt'
-  workflow_dispatch:
 
 permissions:
   contents: write
-  packages: read
 
 jobs:
   convert_txt_to_mrs:
     runs-on: ubuntu-latest
+    timeout-minutes: 5  # 缩短超时时间，避免无谓等待
     steps:
-      - name: Checkout Repository Code
+      - name: 检出代码
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Prepare Docker & Find Mihomo Path (强制Shell验证)
+      - name: 直接转换TXT到MRS（核心：强制退出）
         run: |
           set -e
-          # 1. 检查Docker并拉取镜像
-          echo "🔍 检查Docker版本..."
-          docker --version
-          echo "📥 拉取metacubex/mihomo:latest镜像..."
-          docker pull metacubex/mihomo:latest
-          
-          # 2. 枚举mihomo的常见路径（覆盖所有可能）
-          MIHOMO_CANDIDATES=(
-            "/usr/bin/mihomo"
-            "/usr/local/bin/mihomo"
-            "/app/mihomo"
-            "/mihomo"
-            "/root/mihomo"
-            "/bin/mihomo"
-          )
-          
-          # 3. 强制进入Shell验证路径（核心修复）
-          MIHOMO_PATH=""
-          for PATH_CANDIDATE in "${MIHOMO_CANDIDATES[@]}"; do
-            echo "🔍 验证路径：$PATH_CANDIDATE"
-            # 关键：指定ENTRYPOINT为sh，执行Shell的test命令（而非mihomo）
-            if docker run --rm --entrypoint sh metacubex/mihomo:latest -c "test -x '$PATH_CANDIDATE'"; then
-              MIHOMO_PATH="$PATH_CANDIDATE"
-              echo "✅ 找到有效mihomo路径：$MIHOMO_PATH"
-              break
-            fi
-          done
-          
-          # 4. 兜底：如果仍未找到，直接用镜像默认入口（已知是mihomo）
-          if [ -z "$MIHOMO_PATH" ]; then
-            echo "⚠️ 路径验证失败，使用镜像默认ENTRYPOINT（mihomo）"
-            MIHOMO_PATH="mihomo" # 直接用命令名，依赖镜像PATH
+          # 只处理根目录test.txt（先跑通核心功能）
+          TXT_FILE="./test.txt"
+          MRS_FILE="./test.mrs"
+          TEMP_FILE="./temp.txt"
+
+          # 1. 检查test.txt存在
+          if [ ! -f "$TXT_FILE" ]; then
+            echo "❌ 请在根目录新建test.txt，内容仅保留纯域名（如baidu.com）"
+            exit 1
           fi
-          
-          # 5. 保存路径到环境变量
-          echo "MIHOMO_PATH=$MIHOMO_PATH" >> $GITHUB_ENV
-          echo "✅ Docker环境准备完成"
 
-      - name: Convert All TXT Files to MRS
+          # 2. 清洗TXT（只保留纯域名）
+          grep -v -E '^\s*$|\[source|#|//|;' "$TXT_FILE" | \
+            sed 's/^[+./| \t]*//g' > "$TEMP_FILE"
+
+          if [ ! -s "$TEMP_FILE" ]; then
+            echo "⚠️ 清洗后文件为空，终止"
+            exit 1
+          fi
+
+          # 3. 核心修复：执行编译并强制容器退出（不启动代理）
+          echo "📝 编译test.txt → test.mrs"
+          # 关键：用sh -c包裹命令，执行编译后立即kill mihomo进程
+          docker run --rm --init -v "$PWD:/workspace" -w /workspace metacubex/mihomo:latest \
+            sh -c "mihomo rule-set compile $TEMP_FILE $MRS_FILE && killall mihomo"
+
+          # 4. 验证生成结果
+          if [ -f "$MRS_FILE" ]; then
+            echo "✅ 转换成功！生成test.mrs"
+            ls -lh "$MRS_FILE"
+            rm -f "$TEMP_FILE"
+          else
+            echo "❌ 转换失败"
+            exit 1
+          fi
+
+      - name: 提交test.mrs到仓库
         run: |
-          set -e
-          total_files=0
-          success_files=0
-          failed_files=0
-
-          echo "🔄 开始遍历所有TXT文件..."
-          find . -type f -name "*.txt" -not -path "./.git/*" | while read -r txt_file; do
-            total_files=$((total_files + 1))
-            mrs_file="${txt_file%.txt}.mrs"
-            temp_file="${txt_file%.txt}.temp.txt"
-
-            echo -e "\n========== 处理文件：$txt_file =========="
-            # 清洗TXT文件
-            grep -v -E '^\s*$|\[source|#|//|;' "$txt_file" | \
-              sed 's/^[+./| \t]*//g' | \
-              sed 's/[| \t].*$//g' > "$temp_file"
-
-            # 检查空文件
-            if [ ! -s "$temp_file" ]; then
-              echo "⚠️ 清洗后文件为空，跳过：$txt_file"
-              rm -f "$temp_file"
-              continue
-            fi
-
-            # 核心修复：分两种情况执行编译
-            if [ "${{ env.MIHOMO_PATH }}" = "mihomo" ]; then
-              # 情况1：用镜像默认ENTRYPOINT，直接传参数
-              echo "📝 编译为MRS文件：$mrs_file"
-              docker run --rm \
-                -v "$PWD:/workspace" \
-                -w /workspace \
-                metacubex/mihomo:latest \
-                rule-set compile "$temp_file" "$mrs_file"
-            else
-              # 情况2：用具体路径，指定ENTRYPOINT
-              echo "📝 编译为MRS文件：$mrs_file"
-              docker run --rm \
-                -v "$PWD:/workspace" \
-                -w /workspace \
-                --entrypoint "${{ env.MIHOMO_PATH }}" \
-                metacubex/mihomo:latest \
-                rule-set compile "$temp_file" "$mrs_file"
-            fi
-
-            # 验证生成结果
-            if [ -f "$mrs_file" ]; then
-              echo "✅ 转换成功：$mrs_file"
-              success_files=$((success_files + 1))
-              rm -f "$temp_file"
-            else
-              echo "❌ 转换失败：$txt_file"
-              failed_files=$((failed_files + 1))
-              rm -f "$temp_file"
-            fi
-          done
-
-          # 统计输出
-          echo -e "\n📊 转换统计结果："
-          echo "总TXT文件数：$total_files"
-          echo "成功转换：$success_files"
-          echo "转换失败：$failed_files"
-
-      - name: Commit and Push MRS Files
-        run: |
-          set -e
           git config --local user.name "github-actions[bot]"
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          mrs_changes=$(git status --porcelain | grep '\.mrs' || true)
-          if [ -n "$mrs_changes" ]; then
-            echo "🔖 发现MRS文件变动，开始提交..."
-            git add '*.mrs' **/*.mrs
-            git commit -m "Auto convert TXT to MRS: $(date +'%Y-%m-%d %H:%M:%S')"
-            # 推送重试
-            for i in 1 2 3; do
-              if git push; then
-                echo "✅ MRS文件提交成功！"
-                break
-              else
-                echo "⚠️ 推送失败，第$i次重试..."
-                sleep 3
-              fi
-            done
-          else
-            echo "ℹ️ 无MRS文件变动，跳过提交"
+          
+          if [ -f "test.mrs" ]; then
+            git add test.mrs
+            git commit -m "生成test.mrs $(date +'%Y-%m-%d')"
+            git push
+            echo "✅ 提交成功"
           fi
