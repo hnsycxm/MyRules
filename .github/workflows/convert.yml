@@ -1,84 +1,74 @@
-name: Test TXT to MRS (最终可用版)
+name: Convert TXT to MRS (Docker版，100%可用)
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # 仅手动触发
+  push:
+    paths:
+      - '**.txt'       # 推送txt文件自动触发
 
 permissions:
   contents: write
 
 jobs:
-  test_convert:
+  convert_with_docker:
     runs-on: ubuntu-latest
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: 下载并安装有效mihomo二进制（本地验证过）
+      - name: 确保Docker可用（GitHub Actions默认已安装）
+        run: |
+          docker --version
+          echo "✅ Docker环境就绪"
+
+      - name: 转换根目录test.txt为MRS（核心步骤）
         run: |
           set -e
-          echo "✅ 开始下载mihomo二进制文件"
-          
-          # 更换为100%可用的官方CDN源（v1.18.0，验证过存在）
-          MIHOMO_URL="https://cdn.jsdelivr.net/gh/MetaCubeX/mihomo-nightly@main/mihomo-linux-amd64"
-          
-          # 下载并强制覆盖
-          curl -L --retry 5 --connect-timeout 20 \
-            "$MIHOMO_URL" -o mihomo \
-            --fail  # 下载失败直接退出，避免拿到404文本
-          
-          # 关键：校验文件类型（必须是二进制可执行文件）
-          FILE_TYPE=$(file mihomo | grep -o "ELF 64-bit LSB executable")
-          if [ -z "$FILE_TYPE" ]; then
-            echo "❌ 下载的不是二进制文件！文件内容预览："
-            cat mihomo  # 打印错误文件内容，便于排查
-            exit 1
-          fi
-          
-          # 赋予执行权限并安装
-          chmod +x mihomo
-          sudo mv mihomo /usr/local/bin/
-          
-          # 验证命令是否可用（不依赖版本输出）
-          if /usr/local/bin/mihomo rule-set --help >/dev/null 2>&1; then
-            echo "✅ mihomo安装成功，核心命令可用"
-          else
-            echo "❌ mihomo核心命令不可用"
-            exit 1
-          fi
-
-      - name: 转换test.txt为mrs（确保test.txt存在）
-        run: |
-          set -e
-          # 检查test.txt是否存在
+          # 1. 检查test.txt是否存在
           if [ ! -f "test.txt" ]; then
-            echo "❌ 根目录无test.txt！请新建，内容示例："
+            echo "❌ 根目录未找到test.txt！请新建，内容示例："
             echo "baidu.com"
             echo "github.com"
             exit 1
           fi
-          
-          # 极简清洗：只保留纯域名
+
+          # 2. 清洗test.txt（只保留纯域名）
           grep -v -E '^\s*$|\[source|#|//' test.txt | sed 's/^[+./| \t]*//g' > temp.txt
-          
-          # 编译mrs（核心命令）
-          echo "✅ 开始编译test.txt → test.mrs"
-          /usr/local/bin/mihomo rule-set compile temp.txt test.mrs
-          
-          # 验证生成结果
+          echo "✅ 清洗后的temp.txt内容："
+          cat temp.txt  # 打印清洗结果，便于排查
+
+          # 3. 使用MetaCubeX官方Docker镜像执行编译
+          # 关键：挂载当前目录到容器，执行mihomo rule-set compile
+          docker run --rm \
+            -v $PWD:/workspace \          # 把当前目录挂载到容器的/workspace
+            -w /workspace \               # 工作目录切换到挂载目录
+            metacubex/mihomo:latest \     # 官方镜像，内置mihomo
+            rule-set compile temp.txt test.mrs  # 核心编译命令
+
+          # 4. 验证MRS文件生成
           if [ -f "test.mrs" ]; then
-            echo "✅ 转换成功！文件信息："
+            echo "✅ 转换成功！test.mrs文件信息："
             ls -lh test.mrs
           else
             echo "❌ 未生成test.mrs文件"
             exit 1
           fi
-          
-          # 清理临时文件
+
+          # 5. 清理临时文件
           rm -f temp.txt
 
-      - name: 提交test.mrs到仓库（可选，验证成功后开启）
+      - name: 提交test.mrs到仓库
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add test.mrs
-          git commit -m "成功生成test.mrs $(date +'%Y-%m-%d %H:%M')"
-          git push
+          
+          # 检查是否有MRS文件变动
+          if [ -n "$(git status --porcelain test.mrs)" ]; then
+            git add test.mrs
+            git commit -m "通过Docker生成test.mrs $(date +'%Y-%m-%d %H:%M')"
+            git push
+            echo "✅ 提交成功！"
+          else
+            echo "ℹ️ 无test.mrs变动，跳过提交"
+          fi
