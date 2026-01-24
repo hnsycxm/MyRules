@@ -52,21 +52,7 @@ process_rules() {
     sed -i 's/\r//' "$domain_file"
     log "已修复换行符: $domain_file"
 
-    if command -v python &> /dev/null; then
-        python "$script" "$domain_file"
-    elif command -v python3 &> /dev/null; then
-        python3 "$script" "$domain_file"
-    elif [ -f "/c/Users/Admin/AppData/Local/Programs/Python/Python314/python.exe" ]; then
-        "/c/Users/Admin/AppData/Local/Programs/Python/Python314/python.exe" "$script" "$domain_file"
-    elif [ -x "/c/Python3*/python.exe" ]; then
-        "/c/Python3*/python.exe" "$script" "$domain_file"
-    elif [ -x "$HOME/AppData/Local/Programs/Python/Python*/python.exe" ]; then
-        "$HOME/AppData/Local/Programs/Python/Python*/python.exe" "$script" "$domain_file"
-    else
-        error "未找到 Python 解释器，请安装 Python 并确保其在 PATH 中"
-        return 1
-    fi
-    
+    python "$script" "$domain_file"
     if [ $? -ne 0 ]; then
         error "Python 脚本执行失败: $script"
         return 1
@@ -137,43 +123,12 @@ setup_mihomo_tool() {
     
     if [ "$mihomo_os" = "windows" ]; then
         mihomo_tool="mihomo-windows-amd64-$version.exe"
-        expected_mihomo_tool="mihomo-windows-amd64.exe"
-        mihomo_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/mihomo-windows-amd64-$version.zip"
-        curl -s -L -o "$mihomo_tool.zip" "$mihomo_url"
+        curl -s -L -o "$mihomo_tool" "https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/$mihomo_tool.gz"
         if [ $? -ne 0 ]; then
-            # 如果 zip 下载失败，尝试使用 .gz 格式
-            mihomo_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/$mihomo_tool.gz"
-            curl -s -L -o "$mihomo_tool.gz" "$mihomo_url"
-            if [ $? -ne 0 ]; then
-                error "下载 Mihomo 工具失败"
-                exit 1
-            fi
-            # 检查系统是否支持 gunzip
-            if command -v gunzip &> /dev/null; then
-                gunzip "$mihomo_tool.gz"
-                # 重命名解压后的文件以匹配预期名称
-                if [ -f "$expected_mihomo_tool" ] && [ ! -f "$mihomo_tool" ]; then
-                    mv "$expected_mihomo_tool" "$mihomo_tool"
-                fi
-            else
-                # 如果没有 gunzip，尝试使用系统自带的解压方法
-                error "未找到 gunzip 命令，无法解压 Mihomo 工具"
-                exit 1
-            fi
-        else
-            # 解压 zip 文件
-            if command -v unzip &> /dev/null; then
-                unzip -o "$mihomo_tool.zip"
-                # 重命名解压后的文件以匹配预期名称
-                if [ -f "$expected_mihomo_tool" ] && [ ! -f "$mihomo_tool" ]; then
-                    mv "$expected_mihomo_tool" "$mihomo_tool"
-                fi
-                rm -f "$mihomo_tool.zip"
-            else
-                error "未找到 unzip 命令，无法解压 Mihomo 工具 zip 文件"
-                exit 1
-            fi
+            error "下载 Mihomo 工具失败"
+            exit 1
         fi
+        gunzip "$mihomo_tool.gz"
         chmod +x "$mihomo_tool"
     else
         mihomo_tool="mihomo-$mihomo_os-amd64-$version"
