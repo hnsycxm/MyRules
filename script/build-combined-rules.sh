@@ -3,101 +3,58 @@
 # 切换到脚本所在目录
 cd $(cd "$(dirname "$0")";pwd)
 
-# --- 配置区域 ---
-MAX_JOBS=4  # 设置并发线程数，GitHub Actions 建议设为 2 或 4
+MAX_JOBS=4  # 并发数
 TXT_DIR="../txt"
-# ----------------
 
-# 定义日志函数
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] $@"; }
 error() { echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] $@" >&2; }
 
-# 清理临时文件的函数
 cleanup() {
-    log "正在清理临时文件..."
-    rm -f ./*_domain.txt ./*_Mihomo.txt version.txt mihomo-* mihomo-*.exe
+    log "执行清理..."
+    rm -f ./*_domain.txt ./*_Mihomo.txt version.txt mihomo-*
 }
+trap cleanup EXIT ERR
 
-# 捕获信号并清理
-trap cleanup EXIT ERR INT TERM
-
-# 下载 Mihomo 工具的函数
 setup_mihomo_tool() {
-    log "开始检查/下载 Mihomo 工具"
     platform="$(uname -s)"
-    case "$platform" in
-        Linux*)   mihomo_os="linux";;
-        Darwin*)  mihomo_os="darwin";;
-        CYGWIN*|MINGW*|MSYS*) mihomo_os="windows";;
-        *)        mihomo_os="linux";;
-    esac
+    mihomo_os="linux"
+    [[ "$platform" == "Darwin"* ]] && mihomo_os="darwin"
     
-    # 获取版本信息
     wget -q https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt
-    if [ $? -ne 0 ]; then error "下载版本文件失败"; exit 1; fi
     version=$(cat version.txt)
+    tool="mihomo-$mihomo_os-amd64-$version"
     
-    if [ "$mihomo_os" = "windows" ]; then
-        mihomo_tool="mihomo-windows-amd64-$version.exe"
-        [ ! -f "$mihomo_tool" ] && curl -s -L -o "$mihomo_tool.gz" "https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/$mihomo_tool.gz" && gunzip "$mihomo_tool.gz"
-    else
-        mihomo_tool="mihomo-$mihomo_os-amd64-$version"
-        [ ! -f "$mihomo_tool" ] && wget -q "https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/$mihomo_tool.gz" && gzip -d "$mihomo_tool.gz"
+    if [ ! -f "$tool" ]; then
+        log "下载工具: $tool"
+        wget -q "https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/$tool.gz"
+        gzip -d "$tool.gz"
+        chmod +x "$tool"
     fi
-    
-    chmod +x "$mihomo_tool"
-    echo "$mihomo_tool"
+    echo "$tool"
 }
 
-# 定义核心处理逻辑函数，导出给 xargs 使用
-process_rules_parallel() {
+process_single_file() {
     local txt_file="$1"
-    local mihomo_tool="$2"
-    local script="sort-clash.py"
+    local tool="$2"
+    name=$(basename "$txt_file" .txt)
     
-    filename=$(basename "$txt_file")
-    name="${filename%.*}"
-    domain_file="${name}_domain.txt"
-    mihomo_txt_file="${name}_Mihomo.txt"
-    mihomo_mrs_file="${name}.mrs"
-
-    echo "[$(date '+%H:%M:%S')] 正在处理: $filename"
+    echo "[处理中] $name"
+    cp "$txt_file" "${name}_domain.txt"
+    sed -i 's/\r//' "${name}_domain.txt"
     
-    # 准备工作文件
-    cp "$txt_file" "$domain_file"
-    sed -i 's/\r//' "$domain_file"
-
-    # 1. 执行 Python 脚本去重与子域名合并
-    python3 "$script" "$domain_file" > /dev/null 2>&1
-    if [ $? -ne 0 ]; then echo "  [!] $filename: Python 脚本失败"; return 1; fi
-
-    # 2. 转换为 Mihomo 文本格式
-    sed "s/^/\\+\\./g" "$domain_file" > "$mihomo_txt_file"
-
-    # 3. 编译为 MRS 二进制格式
-    ./"$mihomo_tool" convert-ruleset domain text "$mihomo_txt_file" "$mihomo_mrs_file" > /dev/null 2>&1
-    if [ $? -ne 0 ]; then echo "  [!] $filename: MRS 转换失败"; return 1; fi
-
-    # 4. 移动结果并清理中间文件
-    mv "$mihomo_mrs_file" "../$mihomo_mrs_file"
-    rm -f "$domain_file" "$mihomo_txt_file"
+    python3 sort-clash.py "${name}_domain.txt" > /dev/null 2>&1
+    sed "s/^/\\+\\./g" "${name}_domain.txt" > "${name}_Mihomo.txt"
+    ./"$tool" convert-ruleset domain text "${name}_Mihomo.txt" "../${name}.mrs" > /dev/null 2>&1
     
-    echo "[$(date '+%H:%M:%S')] 完成: $name.mrs"
+    rm -f "${name}_domain.txt" "${name}_Mihomo.txt"
 }
 
-# 导出函数供子 shell (xargs) 调用
-export -f process_rules_parallel
+export -f process_single_file
 export -f log
 
-# --- 主流程 ---
+TOOL_NAME=$(setup_mihomo_tool)
+log "开始并行构建..."
 
-# 1. 环境准备
-MIHOMO_TOOL=$(setup_mihomo_tool)
-log "使用工具: $MIHOMO_TOOL"
+find "$TXT_DIR" -name "*.txt" | xargs -I {} -P "$MAX_JOBS" bash -c "process_single_file '{}' '$TOOL_NAME'"
 
-# 2. 获取文件列表并启动并行任务
-# 使用 xargs -P 实现多线程控制
-find "$TXT_DIR" -maxdepth 1 -name "*.txt" -type f | \
-xargs -I {} -P "$MAX_JOBS" bash -c 'process_rules_parallel "$@"' _ {} "$MIHOMO_TOOL"
-
-log "所有规则处理任务执行完毕！"
+log "构建完成！"
