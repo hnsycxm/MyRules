@@ -4,31 +4,31 @@ import asyncio
 import os
 from pathlib import Path
 
-# 增加 IP/CIDR 校验正则
-IPV4_PATTERN = re.compile(r'^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\/(3[0-2]|[12]?[0-9])?)?$')
-IPV6_PATTERN = re.compile(r'^([0-9a-fA-F]{1,4}:){1,7}[0-9a-fA-F]{1,4}(\/(12[0-8]|1[01][0-9]|[1-9]?[0-9]))?$')
-
-def extract_item(line):
+def extract_domain(line):
     """
-    提取域名或 IP 规则，允许标准格式、+.格式或包含前缀的格式
+    从规则中提取有效域名，允许的格式为 'domain' 或 '+.domain'
+    排除带有 'regexp' 的规则。
     """
     line = line.strip()
-    if 'regexp' in line or not line or line.startswith(('payload:', '#', '!')):
+    if 'regexp' in line:  # 跳过含有 'regexp' 的行
+        return None
+    if not line or line.startswith((
+        'payload:', '#', '!', 'DOMAIN,', 'DOMAIN-KEYWORD,',
+        'DOMAIN-SUFFIX,', 'IP-CIDR,', 'IP-CIDR6,'
+    )):
+        return None
+    if line.startswith('+.'):
+        domain = line[2:].strip()
+    elif line.startswith('- \\') or line.startswith('  - \\'):
+        domain = line.lstrip('- \\').lstrip().rstrip('\\').rstrip()
+    elif '.' in line and not line.startswith('+'):
+        domain = line.strip()
+    else:
         return None
     
-    # 处理常见规则前缀，提取核心内容
-    content = line
-    for prefix in ['DOMAIN,', 'DOMAIN-SUFFIX,', 'DOMAIN-KEYWORD,', 'IP-CIDR,', 'IP-CIDR6,', '+.']:
-        if line.startswith(prefix):
-            content = line[len(prefix):].strip()
-            break
-    
-    # 清理 YAML 列表符号
-    content = content.lstrip('- \\\\').rstrip('\\\\').strip()
-
-    # 验证是否为合法 IP 或 域名
-    if content and (bool(IPV4_PATTERN.match(content)) or bool(IPV6_PATTERN.match(content)) or is_valid_domain(content)):
-        return content
+    # 验证域名格式
+    if domain and is_valid_domain(domain):
+        return domain
     return None
 
 def get_parent_domain(domain):
@@ -42,14 +42,14 @@ def get_parent_domain(domain):
 
 async def process_chunk(chunk):
     """
-    异步处理文件块，提取域名/IP规则
+    异步处理文件块，提取域名规则
     """
-    items = set()
+    domains = set()
     for line in chunk:
-        item = extract_item(line)
-        if item:
-            items.add(item)
-    return items
+        domain = extract_domain(line)
+        if domain:
+            domains.add(domain)
+    return domains
 
 async def read_lines(file_path):
     """
@@ -107,26 +107,24 @@ async def main():
         return
 
     try:
-        # 按块处理文件并分类存储
-        raw_items = set()
-        async for chunk in read_lines(file_name):
-            for line in chunk:
-                item = extract_item(line) # 使用新的提取函数
-                if item:
-                    raw_items.add(item)
+        # 按块处理文件
+        domains = set()
 
-        # 分类：IP 不参与子域名缩减，域名执行缩减逻辑
-        ips = {i for i in raw_items if IPV4_PATTERN.match(i) or IPV6_PATTERN.match(i)}
-        domains = raw_items - ips
-        
-        filtered_domains = remove_subdomains(domains) # 仅对域名去重优化
-        final_list = sorted(list(ips) + list(filtered_domains)) # 合并后全局排序
+        async for chunk in read_lines(file_name):
+            chunk_domains = await process_chunk(chunk)
+            domains.update(chunk_domains)
+
+        # 移除子域名，保留父域名
+        filtered_domains = remove_subdomains(domains)
+
+        # 排序规则：按父域名和子域名排序
+        sorted_domains = sorted(filtered_domains)
 
         # 写入文件
         with open(file_name, 'w', encoding='utf8') as f:
-            f.writelines(f"{item}\n" for item in final_list)
+            f.writelines(f"{domain}\n" for domain in sorted_domains)
 
-        print(f"处理完成，生成的规则总数为：{len(final_list)}")
+        print(f"处理完成，生成的规则总数为：{len(sorted_domains)}")
     except IOError as e:
         print(f"文件操作错误: {e}")
     except Exception as e:
