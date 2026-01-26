@@ -10,7 +10,7 @@ rm -f version.txt mihomo-* mihomo-*.exe
 cleanup() {
     log "检测到错误，正在清理临时文件..."
     rm -f ./*_domain.txt version.txt mihomo-* mihomo-*.exe
-    # 注意：保留中间的 Mihomo 格式文本文件 (._Mihomo.txt)
+    # 注意：保留中间的 Mihomo 格式文本文件 (位于上级目录的 .txt 文件)
 }
 
 # 设置 trap 来捕获错误和退出信号
@@ -34,7 +34,7 @@ process_rules() {
     local txt_file=$2
     local script=$3
     local domain_file="${name}_domain.txt"
-    local mihomo_txt_file="${name}_Mihomo.txt"
+    local mihomo_txt_file="../${name}.txt"
     local mihomo_mrs_file="${name}.mrs"
 
     log "开始处理规则: $name"
@@ -61,7 +61,9 @@ process_rules() {
     log "Python 脚本执行完成: $script"
 
     # 转换为 Mihomo 格式
-    sed "s/^/\\+\\./g" "$domain_file" > "$mihomo_txt_file"
+    temp_file="../${name}_temp.txt"
+    sed "s/^/\\+\\./g" "$domain_file" > "$temp_file"
+    mv "$temp_file" "$mihomo_txt_file"
     ./"$mihomo_tool" convert-ruleset domain text "$mihomo_txt_file" "$mihomo_mrs_file"
     if [ $? -ne 0 ]; then
         error "Mihomo 工具转换失败: $mihomo_txt_file"
@@ -75,7 +77,7 @@ process_rules() {
     
     # 保留中间的 Mihomo 格式文本文件
     # rm -f "$mihomo_txt_file"
-    log "已保留中间 Mihomo 格式文本文件: $mihomo_txt_file"
+    log "已保留中间 Mihomo 格式文本文件: $mihomo_txt_file (保存在根目录)"
 }
 
 # 下载 Mihomo 工具

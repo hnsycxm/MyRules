@@ -8,21 +8,30 @@ def extract_domain(line):
     """
     从规则中提取有效域名，允许的格式为 'domain' 或 '+.domain'
     排除带有 'regexp' 的规则。
+    现在支持域名后添加注释（以 # 或 ! 开头的部分）
     """
     line = line.strip()
-    if 'regexp' in line:  # 跳过含有 'regexp' 的行
+    
+    # 如果整行是以 # 或 ! 开头，则跳过（这是注释行）
+    if not line or line.startswith(('payload:', '#', '!', 'DOMAIN,', 'DOMAIN-KEYWORD,', 'DOMAIN-SUFFIX,', 'IP-CIDR,', 'IP-CIDR6,')):
         return None
-    if not line or line.startswith((
-        'payload:', '#', '!', 'DOMAIN,', 'DOMAIN-KEYWORD,',
-        'DOMAIN-SUFFIX,', 'IP-CIDR,', 'IP-CIDR6,'
-    )):
+    
+    # 检查是否包含注释，如果有则移除注释部分
+    clean_line = line
+    if '#' in line:
+        clean_line = line.split('#')[0].strip()
+    elif '!' in line:
+        clean_line = line.split('!')[0].strip()
+    
+    if 'regexp' in clean_line:  # 跳过含有 'regexp' 的行
         return None
-    if line.startswith('+.'):
-        domain = line[2:].strip()
-    elif line.startswith('- \\') or line.startswith('  - \\'):
-        domain = line.lstrip('- \\').lstrip().rstrip('\\').rstrip()
-    elif '.' in line and not line.startswith('+'):
-        domain = line.strip()
+    
+    if clean_line.startswith('+.'):
+        domain = clean_line[2:].strip()
+    elif clean_line.startswith('- \\') or clean_line.startswith('  - \\'):
+        domain = clean_line.lstrip('- \\').lstrip().rstrip('\\').rstrip()
+    elif '.' in clean_line and not clean_line.startswith('+'):
+        domain = clean_line.strip()
     else:
         return None
     
@@ -107,12 +116,33 @@ async def main():
         return
 
     try:
-        # 按块处理文件
-        domains = set()
-
-        async for chunk in read_lines(file_name):
-            chunk_domains = await process_chunk(chunk)
-            domains.update(chunk_domains)
+        # 读取原文件内容以保留注释信息
+        with open(file_name, 'r', encoding='utf8') as f:
+            original_lines = f.readlines()
+        
+        # 解析每一行，提取域名并保存注释映射
+        domain_comments = {}
+        for line in original_lines:
+            line_stripped = line.strip()
+            if line_stripped and not line_stripped.startswith(('#', '!', 'payload:', 'DOMAIN,', 'DOMAIN-KEYWORD,', 'DOMAIN-SUFFIX,', 'IP-CIDR,', 'IP-CIDR6,')):
+                # 提取域名和可能的注释
+                clean_line = line_stripped
+                comment = ''
+                if '#' in line_stripped:
+                    parts = line_stripped.split('#', 1)
+                    clean_line = parts[0].strip()
+                    comment = ' # ' + parts[1].strip()
+                elif '!' in line_stripped:
+                    parts = line_stripped.split('!', 1)
+                    clean_line = parts[0].strip()
+                    comment = ' ! ' + parts[1].strip()
+                
+                extracted_domain = extract_domain(line_stripped)
+                if extracted_domain:
+                    domain_comments[extracted_domain] = comment
+        
+        # 提取所有域名
+        domains = set(domain_comments.keys())
 
         # 移除子域名，保留父域名
         filtered_domains = remove_subdomains(domains)
@@ -120,9 +150,11 @@ async def main():
         # 排序规则：按父域名和子域名排序
         sorted_domains = sorted(filtered_domains)
 
-        # 写入文件
+        # 写入文件，保留注释
         with open(file_name, 'w', encoding='utf8') as f:
-            f.writelines(f"{domain}\n" for domain in sorted_domains)
+            for domain in sorted_domains:
+                comment = domain_comments.get(domain, '')
+                f.write(f"{domain}{comment}\n")
 
         print(f"处理完成，生成的规则总数为：{len(sorted_domains)}")
     except IOError as e:
