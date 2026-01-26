@@ -14,6 +14,7 @@
 +.888484.xyz
 +.91muou.icu
 +.amemv.com
++.atianqi.com
 +.auete.top
 +.bakstotre.com
 +.bdjuhe.com
@@ -21,13 +22,11 @@
 +.bytedance.net
 +.bytedancevod.com
 +.bytegecko.com
-+.cloudflare88.eu.org
 +.coocaa.com
 +.cs4k.top
 +.ct108.net
 +.dbankcdn.com
 +.dbankcloud.com
-+.docker.io
 +.doubao.com
 +.dyyjmax.org
 +.dyyjv.com
@@ -39,8 +38,8 @@
 +.feimo.fun
 +.filejin.ru
 +.flixster.com
-+.gh-proxy.top
 +.gying.net
++.haimianxz.com
 +.hezids.com
 +.hippoaixue.com
 +.hiyun.tv
