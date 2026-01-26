@@ -9,7 +9,8 @@ rm -f version.txt mihomo-* mihomo-*.exe
 # 设置错误时的清理函数
 cleanup() {
     log "检测到错误，正在清理临时文件..."
-    rm -f ./*_domain.txt ./*_Mihomo.txt version.txt mihomo-* mihomo-*.exe
+    rm -f ./*_domain.txt version.txt mihomo-* mihomo-*.exe
+    # 注意：保留中间的 Mihomo 格式文本文件 (._Mihomo.txt)
 }
 
 # 设置 trap 来捕获错误和退出信号
@@ -72,9 +73,9 @@ process_rules() {
     mv "$mihomo_mrs_file" "../$mihomo_mrs_file"
     log "已将生成文件移动到上级目录: $mihomo_mrs_file"
     
-    # 删除中间的 Mihomo 格式文本文件，只保留原始输入文件
-    rm -f "$mihomo_txt_file"
-    log "已删除中间 Mihomo 格式文本文件: $mihomo_txt_file"
+    # 保留中间的 Mihomo 格式文本文件
+    # rm -f "$mihomo_txt_file"
+    log "已保留中间 Mihomo 格式文本文件: $mihomo_txt_file"
 }
 
 # 下载 Mihomo 工具
@@ -163,4 +164,4 @@ done
 # 等待所有规则并行处理完成
 wait
 
-log "脚本执行完成，临时文件将在退出时自动清理"
+log "脚本执行完成，中间文件已保留供后续使用"
