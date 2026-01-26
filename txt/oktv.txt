@@ -17,6 +17,7 @@ hiyun.tv                                       # 嗨云影视
 v3mh.com                                       # V3漫画
 myanimelist.net                                # MyAnimeList 动漫数据库
 wogg.xxooo.cf                                  # 玩偶哥哥分流
+wogg.one                                       # 玩偶哥哥分流
 xxooo.cf                                       # 玩偶相关
 xn--4kq62z5rby2qupq9ub.top                     # 玩偶哥哥.top
 xn--m7r412advb92j21st65a.tk                    # 玩偶姐姐官方.tk
