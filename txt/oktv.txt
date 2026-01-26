@@ -1,4 +1,3 @@
-# === 字节跳动 (ByteDance) 相关 ===
 bytedance.com                                  # 字节跳动官网/主域名
 bytedance.net                                  # 字节跳动网络
 bytedancevod.com                               # 字节跳动视频点播
@@ -9,8 +8,6 @@ amemv.com                                      # 抖音相关域名
 doubao.com                                     # 豆包 (字节AI)
 toutiaostatic.com                              # 今日头条静态资源
 toutiaovod.com                                 # 今日头条视频点播
-
-# === 影视、动漫与流媒体 ===
 auete.top                                      # Auete影视
 libvio.site                                    # LIBVIO 影视
 dyyjmax.org                                    # 电影玩家 Max
@@ -28,8 +25,6 @@ xzyshd.com                                     # 小猪影视
 flixster.com                                   # 电影评论/影讯
 4kzn.com                                       # 4K指南
 muouso.fun                                     # 木偶搜索
-
-# === 网盘与文件存储 ===
 123panfx.com                                   # 123云盘解析
 yppan.com                                      # 小雅/易盘相关
 pan1.me                                        # 盘觅
@@ -45,8 +40,6 @@ erxiaofn.click                                 # 二小网盘分流
 filejin.ru                                     # 俄罗斯文件托管
 dbankcdn.com                                   # 华为网盘CDN
 dbankcloud.com                                 # 华为云存储
-
-# === 基础设施、CDN与工具 ===
 docker.io                                      # Docker 容器镜像
 gh-proxy.top                                   # GitHub 代理加速
 cloudflare88.eu.org                            # Cloudflare 优选
@@ -64,8 +57,6 @@ uc108.net                                      # 108社区
 ct108.net                                      # 108社区
 picbf.com                                      # 图片服务
 pppoe.top                                      # PPPoE 相关工具
-
-# === 其他及数字/随机域名 ===
 182682.xyz                                     # 影视/资源分流
 252035.xyz                                     # 影视/资源分流
 333232.xyz                                     # 影视/资源分流
