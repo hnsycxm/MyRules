@@ -19,6 +19,7 @@ myanimelist.net                                # MyAnimeList 动漫数据库
 haimianxz.com                                  # 海绵4K
 wogg.xxooo.cf                                  # 玩偶哥哥分流
 wogg.one                                       # 玩偶哥哥分流
+wogg.lol                                       # 玩偶哥哥分流
 xxooo.cf                                       # 玩偶相关
 xn--4kq62z5rby2qupq9ub.top                     # 玩偶哥哥.top
 xn--m7r412advb92j21st65a.tk                    # 玩偶姐姐官方.tk
