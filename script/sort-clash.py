@@ -150,13 +150,22 @@ async def main():
         # 排序规则：按父域名和子域名排序
         sorted_domains = sorted(filtered_domains)
 
-        # 写入文件，保留注释
+        # 生成两个输出文件：
+        # 1. 原始文件：只包含纯净域名（用于Mihomo转换）
         with open(file_name, 'w', encoding='utf8') as f:
+            for domain in sorted_domains:
+                f.write(f"{domain}\n")
+        
+        # 2. 带注释的版本（用于人类阅读）：创建一个额外的带注释文件
+        base_name = file_name.rsplit('.', 1)[0]  # 去掉扩展名
+        annotated_file_name = f"{base_name}_annotated.txt"
+        with open(annotated_file_name, 'w', encoding='utf8') as f:
             for domain in sorted_domains:
                 comment = domain_comments.get(domain, '')
                 f.write(f"{domain}{comment}\n")
 
         print(f"处理完成，生成的规则总数为：{len(sorted_domains)}")
+        print(f"已生成带注释的版本：{annotated_file_name}")
     except IOError as e:
         print(f"文件操作错误: {e}")
     except Exception as e:

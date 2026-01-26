@@ -9,7 +9,7 @@ rm -f version.txt mihomo-* mihomo-*.exe
 # 设置错误时的清理函数
 cleanup() {
     log "检测到错误，正在清理临时文件..."
-    rm -f ./*_domain.txt version.txt mihomo-* mihomo-*.exe
+    rm -f ./*_domain.txt ./*_domain_annotated.txt version.txt mihomo-* mihomo-*.exe ../*_temp_for_convert.txt
     # 注意：保留中间的 Mihomo 格式文本文件 (位于上级目录的 .txt 文件)
 }
 
@@ -34,7 +34,8 @@ process_rules() {
     local txt_file=$2
     local script=$3
     local domain_file="${name}_domain.txt"
-    local mihomo_txt_file="../${name}.txt"
+    local mihomo_txt_file="../${name}_temp_for_convert.txt"
+    local annotated_txt_file="../${name}.txt"
     local mihomo_mrs_file="${name}.mrs"
 
     log "开始处理规则: $name"
@@ -61,10 +62,19 @@ process_rules() {
     log "Python 脚本执行完成: $script"
 
     # 转换为 Mihomo 格式
-    temp_file="../${name}_temp.txt"
-    sed "s/^/\\+\\./g" "$domain_file" > "$temp_file"
-    mv "$temp_file" "$mihomo_txt_file"
+    sed "s/^/\\+\\./g" "$domain_file" > "$mihomo_txt_file"
     ./"$mihomo_tool" convert-ruleset domain text "$mihomo_txt_file" "$mihomo_mrs_file"
+        
+    # 将带注释的版本移到最终位置
+    if [ -f "../${name}_domain_annotated.txt" ]; then
+        # 将注释版转换为Mihomo格式并保存为最终文件
+        sed "s/^/\+\./g" "../${name}_domain_annotated.txt" > "$annotated_txt_file"
+        log "已生成带注释的Mihomo格式文件: $annotated_txt_file"
+    else
+        # 如果没有注释版，则将标准版转换为Mihomo格式
+        sed "s/^/\+\./g" "$domain_file" > "$annotated_txt_file"
+        log "已生成Mihomo格式文件: $annotated_txt_file"
+    fi
     if [ $? -ne 0 ]; then
         error "Mihomo 工具转换失败: $mihomo_txt_file"
         return 1
@@ -75,9 +85,9 @@ process_rules() {
     mv "$mihomo_mrs_file" "../$mihomo_mrs_file"
     log "已将生成文件移动到上级目录: $mihomo_mrs_file"
     
-    # 保留中间的 Mihomo 格式文本文件
-    # rm -f "$mihomo_txt_file"
-    log "已保留中间 Mihomo 格式文本文件: $mihomo_txt_file (保存在根目录)"
+    # 删除临时转换文件
+    rm -f "$mihomo_txt_file"
+    log "已保留中间 Mihomo 格式文本文件: $annotated_txt_file (保存在根目录)"
 }
 
 # 下载 Mihomo 工具
