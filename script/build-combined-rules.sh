@@ -1,5 +1,5 @@
 #!/bin/bash
-# script/build-combined-rules.sh (保持原文件名)
+# script/build-combined-rules.sh
 set -euo pipefail
 
 SCRIPT_DIR=" $ (cd " $ (dirname " $ 0")"; pwd)"
