@@ -6,7 +6,8 @@ bytegecko.com                                  # 字节Gecko服务 (资源更新
 snssdk.com                                     # 字节通用SDK (今日头条/抖音)
 amemv.com                                      # 抖音相关域名
 doubao.com                                     # 豆包 (字节AI)
-amemv.com  
+amemv.com                                      
+bilibili.com                                   # 哔哩哔哩
 toutiaostatic.com                              # 今日头条静态资源
 toutiaovod.com                                 # 今日头条视频点播
 auete.top                                      # Auete影视
