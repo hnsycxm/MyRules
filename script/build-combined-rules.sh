@@ -89,14 +89,7 @@ process_rules() {
     sed "s/^/\+\./g" "$domain_file" > "$annotated_txt_file"
     log "已生成Mihomo格式文件: $annotated_txt_file"
     
-    # 创建带注释的Mihomo格式文件（用于人类阅读）
-    if [ -f "$PROJECT_ROOT/${name}_annotated.txt" ]; then
-        # 生成带注释的Mihomo格式文件（单独保存）
-        comment_file="$PROJECT_ROOT/${name}_annotated.txt"
-        annotated_mihomo_file="$PROJECT_ROOT/${name}_annotated_mihomo.txt"
-        sed "s/^/\+\./g" "$comment_file" > "$annotated_mihomo_file"
-        log "已生成带注释的Mihomo格式文件: $annotated_mihomo_file"
-    fi
+
     
     # 删除临时转换文件
     rm -f "$mihomo_txt_file"

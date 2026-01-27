@@ -188,14 +188,6 @@ async def main():
             for domain in sorted_domains:
                 f.write(f"{domain}\n")
         
-        # 2. 带注释的版本（用于人类阅读）：创建一个额外的带注释文件
-        base_name = os.path.basename(file_name).rsplit('.', 1)[0]  # 获取文件名（去掉扩展名）
-        annotated_file_name = f"../{base_name}_annotated.txt"
-        with open(annotated_file_name, 'w', encoding='utf8') as f:
-            for domain in sorted_domains:
-                comment = domain_comments.get(domain, '')
-                f.write(f"{domain}{comment}\n")
-        
         # 生成日志文件
         log_base_name = os.path.basename(file_name).rsplit('.', 1)[0]  # 获取文件名（去掉扩展名）
         log_filename = f"../{log_base_name}_processing.log"
@@ -221,7 +213,6 @@ async def main():
                     f.write(f"  {line_info}\n")
 
         print(f"处理完成，生成的规则总数为：{len(sorted_domains)}")
-        print(f"已生成带注释的版本：{annotated_file_name}")
         print(f"已生成处理日志：{log_filename}")
     except IOError as e:
         print(f"文件操作错误: {e}")
