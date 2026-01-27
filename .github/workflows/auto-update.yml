@@ -1,4 +1,4 @@
-# .github/workflows/auto-update-rules.yml (修复语法错误)
+# .github/workflows/auto-update-rules.yml
 name: Auto Update Rules
 on:
   push:
@@ -27,21 +27,17 @@ jobs:
       actions: write
     
     steps:
-      # Checkout the repository
       - uses: actions/checkout@v3
 
-      # Setup Python
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'
 
-      # Run build script
       - name: Built Rules
         run: |
           bash ./script/build-combined-rules.sh || echo "Build completed with some warnings"
       
-      # Commit and push changes if detected
       - name: Commit Changes
         id: commit
         uses: stefanzweifel/git-auto-commit-action@v4
@@ -55,10 +51,8 @@ jobs:
           github_token:  $ {{ secrets.GITHUB_TOKEN }}
           branch:  $ {{ github.ref }}
 
-      # Optional: Delete old workflow runs to save storage
       - name: Delete old workflow runs
         uses: Mattraks/delete-workflow-runs@v2
-        if:  $ {{ github.event_name != 'schedule' }}
         with:
           token:  $ {{ secrets.GITHUB_TOKEN }}
           repository:  $ {{ github.repository }}
