@@ -36,6 +36,7 @@ feimao888.fun                                  # 肥猫网盘系列
 feimo.fun                                      # 肥猫相关
 xiaocge.fun                                    # 小橙歌网盘
 zhizhenpan.fun                                 # 指针网盘
+zhenyunpan.com
 2xiaopan.fun                                   # 二小网盘
 erixaopan.fun                                  # 二小网盘系列
 erxiaofn.site                                  # 二小网盘分流
@@ -46,7 +47,9 @@ dbankcloud.com                                 # 华为云存储
 ksyuncdn.com                                   # 金山云 CDN
 coocaa.com                                     # 酷开 (创维系统)
 atianqi.com                                    # 极光盒子桌面天气
+aiseet.atianqi.com                             # 极光盒子桌面天气
 skyworthdigitaliot.com                         # 创维数字物联网
+skyworthbox.com                                # 创维数字物联网
 service-cn.hwccpc.com                          # 华为终端服务
 jikedata.com                                   # 极客数据
 tcy365.com                                     # 同城游
