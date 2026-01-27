@@ -64,6 +64,7 @@
 +.pppoe.top
 +.seedhub.cc
 +.service-cn.hwccpc.com
++.skyworthbox.com
 +.skyworthdigitaliot.com
 +.snssdk.com
 +.tcy365.com
@@ -91,6 +92,7 @@
 +.youkupic.com
 +.yppan.com
 +.yydsys.top
++.zhenyunpan.com
 +.zhizhen1.top
 +.zhizhenpan.fun
 +.zijieapi.com
