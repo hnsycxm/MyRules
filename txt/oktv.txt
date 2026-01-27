@@ -17,7 +17,6 @@ hiyun.tv                                       # 嗨云影视
 v3mh.com                                       # V3漫画
 myanimelist.net                                # MyAnimeList 动漫数据库
 haimianxz.com                                  # 海绵4K
-wogg.xxooo.cf                                  # 玩偶哥哥分流
 wogg.one                                       # 玩偶哥哥分流
 wogg.lol                                       # 玩偶哥哥分流
 xxooo.cf                                       # 玩偶相关
@@ -47,7 +46,6 @@ dbankcloud.com                                 # 华为云存储
 ksyuncdn.com                                   # 金山云 CDN
 coocaa.com                                     # 酷开 (创维系统)
 atianqi.com                                    # 极光盒子桌面天气
-aiseet.atianqi.com                             # 极光盒子桌面天气
 skyworthdigitaliot.com                         # 创维数字物联网
 skyworthbox.com                                # 创维数字物联网
 service-cn.hwccpc.com                          # 华为终端服务
