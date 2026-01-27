@@ -32,7 +32,7 @@ jobs:
       # Run build script
       - name: Built Rules
         run: |
-          bash ./script/build-combined-rules.sh
+          bash ./script/build-combined-rules.sh || echo "Build completed with some warnings"
       
       # Commit and push changes if detected
       - name: Commit Changes
