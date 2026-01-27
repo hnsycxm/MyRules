@@ -3,8 +3,10 @@ import re
 import asyncio
 import os
 from pathlib import Path
+import logging
+from typing import Set, Dict, List, Optional, Tuple
 
-def extract_domain(line):
+def extract_domain(line: str) -> Optional[str]:
     """
     从规则中提取有效域名，允许的格式为 'domain' 或 '+.domain'
     排除带有 'regexp' 的规则。
@@ -18,17 +20,14 @@ def extract_domain(line):
     
     # 检查是否包含注释，如果有则移除注释部分
     clean_line = line
-    comment = ''
     if '#' in line:
         parts = line.split('#', 1)
         clean_line = parts[0].strip()
-        comment = parts[1].strip()
     elif '!' in line:
         parts = line.split('!', 1)
         clean_line = parts[0].strip()
-        comment = parts[1].strip()
     
-    if 'regexp' in clean_line:  # 跳过含有 'regexp' 的行
+    if 'regexp' in clean_line.lower():  # 跳过含有 'regexp' 的行
         return None
     
     if clean_line.startswith('+.'):
@@ -76,12 +75,16 @@ async def read_lines(file_path):
                 break
             yield lines
 
-def is_valid_domain(domain):
+def is_valid_domain(domain: str) -> bool:
     """
     验证域名格式是否有效
     """
     if not domain or len(domain) > 253:
         return False
+    
+    # 检查是否以点结尾
+    if domain.endswith('.'):
+        domain = domain[:-1]
     
     # 域名标签最大长度为63个字符
     labels = domain.split('.')
@@ -131,27 +134,25 @@ async def main():
         log_entries.append(f"读取到 {len(original_lines)} 行原始数据")
         
         # 解析每一行，提取域名并保存注释映射
-        domain_comments = {}
-        skipped_lines = []
-        invalid_domains = []
+        domain_comments: Dict[str, str] = {}
+        skipped_lines: List[str] = []
+        invalid_domains: List[str] = []
         
         for i, line in enumerate(original_lines, 1):
             line_stripped = line.strip()
             if line_stripped and not line_stripped.startswith(('#', '!', 'payload:', 'DOMAIN,', 'DOMAIN-KEYWORD,', 'DOMAIN-SUFFIX,', 'IP-CIDR,', 'IP-CIDR6,')):
                 # 提取域名和可能的注释
-                clean_line = line_stripped
-                comment = ''
-                if '#' in line_stripped:
-                    parts = line_stripped.split('#', 1)
-                    clean_line = parts[0].strip()
-                    comment = ' # ' + parts[1].strip()
-                elif '!' in line_stripped:
-                    parts = line_stripped.split('!', 1)
-                    clean_line = parts[0].strip()
-                    comment = ' ! ' + parts[1].strip()
-                
                 extracted_domain = extract_domain(line_stripped)
                 if extracted_domain:
+                    # 提取注释部分
+                    comment = ''
+                    if '#' in line_stripped:
+                        parts = line_stripped.split('#', 1)
+                        comment = ' # ' + parts[1].strip()
+                    elif '!' in line_stripped:
+                        parts = line_stripped.split('!', 1)
+                        comment = ' ! ' + parts[1].strip()
+                    
                     domain_comments[extracted_domain] = comment
                     log_entries.append(f"第{i}行成功提取域名: {extracted_domain}{comment}")
                 else:
@@ -188,15 +189,16 @@ async def main():
                 f.write(f"{domain}\n")
         
         # 2. 带注释的版本（用于人类阅读）：创建一个额外的带注释文件
-        base_name = file_name.rsplit('.', 1)[0]  # 去掉扩展名
-        annotated_file_name = f"{base_name}_annotated.txt"
+        base_name = os.path.basename(file_name).rsplit('.', 1)[0]  # 获取文件名（去掉扩展名）
+        annotated_file_name = f"../{base_name}_annotated.txt"
         with open(annotated_file_name, 'w', encoding='utf8') as f:
             for domain in sorted_domains:
                 comment = domain_comments.get(domain, '')
                 f.write(f"{domain}{comment}\n")
         
         # 生成日志文件
-        log_filename = file_name.rsplit('.', 1)[0] + '_processing.log'
+        log_base_name = os.path.basename(file_name).rsplit('.', 1)[0]  # 获取文件名（去掉扩展名）
+        log_filename = f"../{log_base_name}_processing.log"
         with open(log_filename, 'w', encoding='utf8') as f:
             f.write("域名处理日志\n")
             f.write("=" * 50 + "\n")
