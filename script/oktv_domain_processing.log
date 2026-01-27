@@ -1,6 +1,6 @@
 域名处理日志
 ==================================================
-读取到 100 行原始数据
+读取到 98 行原始数据
 第1行成功提取域名: bytedance.com # 字节跳动官网/主域名
 第2行成功提取域名: bytedance.net # 字节跳动网络
 第3行成功提取域名: bytedancevod.com # 字节跳动视频点播
@@ -20,94 +20,90 @@
 第17行成功提取域名: v3mh.com # V3漫画
 第18行成功提取域名: myanimelist.net # MyAnimeList 动漫数据库
 第19行成功提取域名: haimianxz.com # 海绵4K
-第20行成功提取域名: wogg.xxooo.cf # 玩偶哥哥分流
-第21行成功提取域名: wogg.one # 玩偶哥哥分流
-第22行成功提取域名: wogg.lol # 玩偶哥哥分流
-第23行成功提取域名: xxooo.cf # 玩偶相关
-第24行成功提取域名: xn--4kq62z5rby2qupq9ub.top # 玩偶哥哥.top
-第25行成功提取域名: xn--m7r412advb92j21st65a.tk # 玩偶姐姐官方.tk
-第26行成功提取域名: xn--sss604efuw.com # 玩偶姐姐.com
-第27行成功提取域名: xzyshd.com # 小猪影视
-第28行成功提取域名: flixster.com # 电影评论/影讯
-第29行成功提取域名: 4kzn.com # 4K指南
-第30行成功提取域名: muouso.fun # 木偶搜索
-第31行成功提取域名: 123panfx.com # 123云盘解析
-第32行成功提取域名: yppan.com # 小雅/易盘相关
-第33行成功提取域名: pan1.me # 盘觅
-第34行成功提取域名: feimao666.fun # 肥猫网盘系列
-第35行成功提取域名: feimao888.fun # 肥猫网盘系列
-第36行成功提取域名: feimo.fun # 肥猫相关
-第37行成功提取域名: xiaocge.fun # 小橙歌网盘
-第38行成功提取域名: zhizhenpan.fun # 指针网盘
-第39行成功提取域名: zhenyunpan.com
-第40行成功提取域名: 2xiaopan.fun # 二小网盘
-第41行成功提取域名: erixaopan.fun # 二小网盘系列
-第42行成功提取域名: erxiaofn.site # 二小网盘分流
-第43行成功提取域名: erxiaofn.click # 二小网盘分流
-第44行成功提取域名: filejin.ru # 俄罗斯文件托管
-第45行成功提取域名: dbankcdn.com # 华为网盘CDN
-第46行成功提取域名: dbankcloud.com # 华为云存储
-第47行成功提取域名: ksyuncdn.com # 金山云 CDN
-第48行成功提取域名: coocaa.com # 酷开 (创维系统)
-第49行成功提取域名: atianqi.com # 极光盒子桌面天气
-第50行成功提取域名: aiseet.atianqi.com # 极光盒子桌面天气
-第51行成功提取域名: skyworthdigitaliot.com # 创维数字物联网
-第52行成功提取域名: skyworthbox.com # 创维数字物联网
-第53行成功提取域名: service-cn.hwccpc.com # 华为终端服务
-第54行成功提取域名: jikedata.com # 极客数据
-第55行成功提取域名: tcy365.com # 同城游
-第56行成功提取域名: tcy365.net # 同城游网络
-第57行成功提取域名: uc108.com # 108社区
-第58行成功提取域名: uc108.net # 108社区
-第59行成功提取域名: 108uc.com # 108社区
-第60行成功提取域名: 108uc.net # 108社区
-第61行成功提取域名: ct108.net # 108社区
-第62行成功提取域名: picbf.com # 图片服务
-第63行成功提取域名: pppoe.top # PPPoE 相关工具
-第64行成功提取域名: 182682.xyz # 影视/资源分流
-第65行成功提取域名: 252035.xyz # 影视/资源分流
-第66行成功提取域名: 333232.xyz # 影视/资源分流
-第67行成功提取域名: 666291.xyz # 影视/资源分流
-第68行成功提取域名: 888484.xyz # 影视/资源分流
-第69行成功提取域名: 87333.cc # 资源站
-第70行成功提取域名: 4c44.com # 短域名
-第71行成功提取域名: 6huo.com # 行业站/导航
-第72行成功提取域名: 7moor-fs2.com # 七陌客服系统
-第73行成功提取域名: 91muou.icu # 木偶影视相关
-第74行成功提取域名: bakstotre.com # 存储相关
-第75行成功提取域名: bdjuhe.com # 聚合接口
-第76行成功提取域名: cs4k.top # 4K资源
-第77行成功提取域名: hezids.com # 盒子电视
-第78行成功提取域名: hippoaixue.com # 河马爱学
-第79行成功提取域名: hkybqufgh.com # 随机混淆域名
-第80行成功提取域名: hmxz.org # 资源站
-第81行成功提取域名: jialanling.com # 迦蓝岭
-第82行成功提取域名: kstore.vip # Kstore存储
-第83行成功提取域名: labi88.sbs # 蜡笔相关资源
-第84行成功提取域名: mihdr.top # 小米HDR相关
-第85行成功提取域名: miqk.cc # 资源站
-第86行成功提取域名: n0909.com # 资源站
-第87行成功提取域名: seedhub.cc # 种子库
-第88行成功提取域名: tutu.pm # 兔兔图床
-第89行成功提取域名: wexwp.cc # 资源站
-第90行成功提取域名: xhww.net # 资源站
-第91行成功提取域名: xuexizhinan.com # 学习指南
-第92行成功提取域名: yhgfb-cn-static.com # 静态资源分发
-第93行成功提取域名: ymck.pro # 资源站
-第94行成功提取域名: youkupic.com # 优酷图片缓存
-第95行成功提取域名: yydsys.top # 爷爷的电视
-第96行成功提取域名: ok321.top # 影视接口
-第97行成功提取域名: xiaomi666.fun # 影视资源
-第98行成功提取域名: leijing1.com # 雷惊资源
-第99行成功提取域名: zhizhen1.top # 指针资源
-第100行成功提取域名: kuiniuca.com # 资源站
-初步提取到 100 个域名
-因子域名冗余被移除: wogg.xxooo.cf
-因子域名冗余被移除: aiseet.atianqi.com
+第20行成功提取域名: wogg.one # 玩偶哥哥分流
+第21行成功提取域名: wogg.lol # 玩偶哥哥分流
+第22行成功提取域名: xxooo.cf # 玩偶相关
+第23行成功提取域名: xn--4kq62z5rby2qupq9ub.top # 玩偶哥哥.top
+第24行成功提取域名: xn--m7r412advb92j21st65a.tk # 玩偶姐姐官方.tk
+第25行成功提取域名: xn--sss604efuw.com # 玩偶姐姐.com
+第26行成功提取域名: xzyshd.com # 小猪影视
+第27行成功提取域名: flixster.com # 电影评论/影讯
+第28行成功提取域名: 4kzn.com # 4K指南
+第29行成功提取域名: muouso.fun # 木偶搜索
+第30行成功提取域名: 123panfx.com # 123云盘解析
+第31行成功提取域名: yppan.com # 小雅/易盘相关
+第32行成功提取域名: pan1.me # 盘觅
+第33行成功提取域名: feimao666.fun # 肥猫网盘系列
+第34行成功提取域名: feimao888.fun # 肥猫网盘系列
+第35行成功提取域名: feimo.fun # 肥猫相关
+第36行成功提取域名: xiaocge.fun # 小橙歌网盘
+第37行成功提取域名: zhizhenpan.fun # 指针网盘
+第38行成功提取域名: zhenyunpan.com
+第39行成功提取域名: 2xiaopan.fun # 二小网盘
+第40行成功提取域名: erixaopan.fun # 二小网盘系列
+第41行成功提取域名: erxiaofn.site # 二小网盘分流
+第42行成功提取域名: erxiaofn.click # 二小网盘分流
+第43行成功提取域名: filejin.ru # 俄罗斯文件托管
+第44行成功提取域名: dbankcdn.com # 华为网盘CDN
+第45行成功提取域名: dbankcloud.com # 华为云存储
+第46行成功提取域名: ksyuncdn.com # 金山云 CDN
+第47行成功提取域名: coocaa.com # 酷开 (创维系统)
+第48行成功提取域名: atianqi.com # 极光盒子桌面天气
+第49行成功提取域名: skyworthdigitaliot.com # 创维数字物联网
+第50行成功提取域名: skyworthbox.com # 创维数字物联网
+第51行成功提取域名: service-cn.hwccpc.com # 华为终端服务
+第52行成功提取域名: jikedata.com # 极客数据
+第53行成功提取域名: tcy365.com # 同城游
+第54行成功提取域名: tcy365.net # 同城游网络
+第55行成功提取域名: uc108.com # 108社区
+第56行成功提取域名: uc108.net # 108社区
+第57行成功提取域名: 108uc.com # 108社区
+第58行成功提取域名: 108uc.net # 108社区
+第59行成功提取域名: ct108.net # 108社区
+第60行成功提取域名: picbf.com # 图片服务
+第61行成功提取域名: pppoe.top # PPPoE 相关工具
+第62行成功提取域名: 182682.xyz # 影视/资源分流
+第63行成功提取域名: 252035.xyz # 影视/资源分流
+第64行成功提取域名: 333232.xyz # 影视/资源分流
+第65行成功提取域名: 666291.xyz # 影视/资源分流
+第66行成功提取域名: 888484.xyz # 影视/资源分流
+第67行成功提取域名: 87333.cc # 资源站
+第68行成功提取域名: 4c44.com # 短域名
+第69行成功提取域名: 6huo.com # 行业站/导航
+第70行成功提取域名: 7moor-fs2.com # 七陌客服系统
+第71行成功提取域名: 91muou.icu # 木偶影视相关
+第72行成功提取域名: bakstotre.com # 存储相关
+第73行成功提取域名: bdjuhe.com # 聚合接口
+第74行成功提取域名: cs4k.top # 4K资源
+第75行成功提取域名: hezids.com # 盒子电视
+第76行成功提取域名: hippoaixue.com # 河马爱学
+第77行成功提取域名: hkybqufgh.com # 随机混淆域名
+第78行成功提取域名: hmxz.org # 资源站
+第79行成功提取域名: jialanling.com # 迦蓝岭
+第80行成功提取域名: kstore.vip # Kstore存储
+第81行成功提取域名: labi88.sbs # 蜡笔相关资源
+第82行成功提取域名: mihdr.top # 小米HDR相关
+第83行成功提取域名: miqk.cc # 资源站
+第84行成功提取域名: n0909.com # 资源站
+第85行成功提取域名: seedhub.cc # 种子库
+第86行成功提取域名: tutu.pm # 兔兔图床
+第87行成功提取域名: wexwp.cc # 资源站
+第88行成功提取域名: xhww.net # 资源站
+第89行成功提取域名: xuexizhinan.com # 学习指南
+第90行成功提取域名: yhgfb-cn-static.com # 静态资源分发
+第91行成功提取域名: ymck.pro # 资源站
+第92行成功提取域名: youkupic.com # 优酷图片缓存
+第93行成功提取域名: yydsys.top # 爷爷的电视
+第94行成功提取域名: ok321.top # 影视接口
+第95行成功提取域名: xiaomi666.fun # 影视资源
+第96行成功提取域名: leijing1.com # 雷惊资源
+第97行成功提取域名: zhizhen1.top # 指针资源
+第98行成功提取域名: kuiniuca.com # 资源站
+初步提取到 98 个域名
 
 ==================================================
 统计信息:
-- 原始行数: 100
-- 初始提取域名数: 100
+- 原始行数: 98
+- 初始提取域名数: 98
 - 最终保留域名数: 98
-- 被移除域名数: 2
+- 被移除域名数: 0
