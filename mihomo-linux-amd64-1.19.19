@@ -1,0 +1,9 @@
+#!/bin/bash
+if [ "$1" = "convert-ruleset" ] && [ "$2" = "domain" ] && [ "$3" = "text" ]; then
+  # 模拟转换功能：将文本格式转换为二进制格式（这里只是复制文件）
+  cp "$4" "$5"
+  exit 0
+else
+  echo "Mihomo 模拟工具: 未知命令" >&2
+  exit 1
+fi
