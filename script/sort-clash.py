@@ -1,4 +1,4 @@
-# sort-clash.py (保持原文件名)
+# sort-clash.py
 import sys
 import re
 import os
