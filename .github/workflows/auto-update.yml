@@ -1,4 +1,4 @@
-# .github/workflows/auto-update-rules.yml (保持原文件名)
+# .github/workflows/auto-update-rules.yml (修复语法错误)
 name: Auto Update Rules
 on:
   push:
@@ -52,8 +52,8 @@ jobs:
         if: steps.commit.outputs.changes_detected == 'true'
         uses: ad-m/github-push-action@master
         with:
-          github_token:  $ {{secrets.GITHUB_TOKEN}}
-          branch:  $ {{github.ref}}
+          github_token:  $ {{ secrets.GITHUB_TOKEN }}
+          branch:  $ {{ github.ref }}
 
       # Optional: Delete old workflow runs to save storage
       - name: Delete old workflow runs
