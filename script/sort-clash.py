@@ -18,10 +18,15 @@ def extract_domain(line):
     
     # 检查是否包含注释，如果有则移除注释部分
     clean_line = line
+    comment = ''
     if '#' in line:
-        clean_line = line.split('#')[0].strip()
+        parts = line.split('#', 1)
+        clean_line = parts[0].strip()
+        comment = parts[1].strip()
     elif '!' in line:
-        clean_line = line.split('!')[0].strip()
+        parts = line.split('!', 1)
+        clean_line = parts[0].strip()
+        comment = parts[1].strip()
     
     if 'regexp' in clean_line:  # 跳过含有 'regexp' 的行
         return None
@@ -115,14 +120,22 @@ async def main():
         print(f"错误：{file_name} 不是一个有效的文件")
         return
 
+    # 初始化日志
+    log_entries = []
+    
     try:
         # 读取原文件内容以保留注释信息
         with open(file_name, 'r', encoding='utf8') as f:
             original_lines = f.readlines()
         
+        log_entries.append(f"读取到 {len(original_lines)} 行原始数据")
+        
         # 解析每一行，提取域名并保存注释映射
         domain_comments = {}
-        for line in original_lines:
+        skipped_lines = []
+        invalid_domains = []
+        
+        for i, line in enumerate(original_lines, 1):
             line_stripped = line.strip()
             if line_stripped and not line_stripped.startswith(('#', '!', 'payload:', 'DOMAIN,', 'DOMAIN-KEYWORD,', 'DOMAIN-SUFFIX,', 'IP-CIDR,', 'IP-CIDR6,')):
                 # 提取域名和可能的注释
@@ -140,13 +153,31 @@ async def main():
                 extracted_domain = extract_domain(line_stripped)
                 if extracted_domain:
                     domain_comments[extracted_domain] = comment
+                    log_entries.append(f"第{i}行成功提取域名: {extracted_domain}{comment}")
+                else:
+                    invalid_domains.append(f"第{i}行: {line_stripped}")
+                    log_entries.append(f"第{i}行无法提取域名: {line_stripped}")
+            else:
+                if line_stripped:  # 如果是注释行或特殊格式行
+                    skipped_lines.append(f"第{i}行: {line_stripped}")
+                    log_entries.append(f"第{i}行被跳过（注释或特殊格式）: {line_stripped}")
+        
+        # 记录原始域名数量
+        original_domains_count = len(domain_comments)
+        log_entries.append(f"初步提取到 {original_domains_count} 个域名")
         
         # 提取所有域名
         domains = set(domain_comments.keys())
 
         # 移除子域名，保留父域名
         filtered_domains = remove_subdomains(domains)
-
+        
+        # 记录被过滤的域名
+        removed_domains = domains - filtered_domains
+        if removed_domains:
+            for removed in removed_domains:
+                log_entries.append(f"因子域名冗余被移除: {removed}")
+        
         # 排序规则：按父域名和子域名排序
         sorted_domains = sorted(filtered_domains)
 
@@ -163,9 +194,33 @@ async def main():
             for domain in sorted_domains:
                 comment = domain_comments.get(domain, '')
                 f.write(f"{domain}{comment}\n")
+        
+        # 生成日志文件
+        log_filename = file_name.rsplit('.', 1)[0] + '_processing.log'
+        with open(log_filename, 'w', encoding='utf8') as f:
+            f.write("域名处理日志\n")
+            f.write("=" * 50 + "\n")
+            for entry in log_entries:
+                f.write(entry + "\n")
+            
+            f.write("\n" + "=" * 50 + "\n")
+            f.write(f"统计信息:\n")
+            f.write(f"- 原始行数: {len(original_lines)}\n")
+            f.write(f"- 初始提取域名数: {original_domains_count}\n")
+            f.write(f"- 最终保留域名数: {len(sorted_domains)}\n")
+            f.write(f"- 被移除域名数: {len(removed_domains)}\n")
+            if skipped_lines:
+                f.write("\n被跳过的行:\n")
+                for line_info in skipped_lines:
+                    f.write(f"  {line_info}\n")
+            if invalid_domains:
+                f.write("\n无效域名行:\n")
+                for line_info in invalid_domains:
+                    f.write(f"  {line_info}\n")
 
         print(f"处理完成，生成的规则总数为：{len(sorted_domains)}")
         print(f"已生成带注释的版本：{annotated_file_name}")
+        print(f"已生成处理日志：{log_filename}")
     except IOError as e:
         print(f"文件操作错误: {e}")
     except Exception as e:
