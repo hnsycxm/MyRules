@@ -1,4 +1,3 @@
-# .github/workflows/auto-update-rules.yml
 name: Auto Update Rules
 on:
   push:
@@ -27,17 +26,15 @@ jobs:
       actions: write
     
     steps:
+      # Checkout the repository
       - uses: actions/checkout@v3
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-
+      # Run build script
       - name: Built Rules
         run: |
-          bash ./script/build-combined-rules.sh || echo "Build completed with some warnings"
+          bash ./script/build-combined-rules.sh
       
+      # Commit and push changes if detected
       - name: Commit Changes
         id: commit
         uses: stefanzweifel/git-auto-commit-action@v4
@@ -48,13 +45,15 @@ jobs:
         if: steps.commit.outputs.changes_detected == 'true'
         uses: ad-m/github-push-action@master
         with:
-          github_token:  $ {{ secrets.GITHUB_TOKEN }}
-          branch:  $ {{ github.ref }}
+          github_token: ${{secrets.GITHUB_TOKEN}}
+          branch: ${{github.ref}}
 
+      # Optional: Delete old workflow runs to save storage
       - name: Delete old workflow runs
         uses: Mattraks/delete-workflow-runs@v2
+        if: ${{ github.event_name != 'schedule' }}
         with:
-          token:  $ {{ secrets.GITHUB_TOKEN }}
-          repository:  $ {{ github.repository_owner }}/ $ {{ github.event.repository.name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
           retain_days: 30
           keep_minimum_runs: 6
