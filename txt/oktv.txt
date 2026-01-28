@@ -40,6 +40,7 @@ feimo.fun
 filejin.ru
 flixster.com
 gying.net
+gtimg.com
 haimianxz.com
 hezids.com
 hippoaixue.com
@@ -68,11 +69,13 @@ seedhub.cc
 service-cn.hwccpc.com
 skyworthbox.com
 skyworthdigitaliot.com
+skyworthdigital.com
 snssdk.com
 tcy365.com
 tcy365.net
 toutiaostatic.com
 toutiaovod.com
+tencent-cloud.net
 tutu.pm
 uc108.com
 uc108.net
