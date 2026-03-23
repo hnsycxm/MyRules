@@ -59,9 +59,9 @@ jobs:
           file_pattern: '*.mrs *.txt'
           commit_options: '--signoff'
 
-      # Optional: Delete old workflow runs to save storage - using latest version
+      # Optional: Delete old workflow runs to save storage - using latest compatible version
       - name: Delete old workflow runs
-        uses: Mattraks/delete-workflow-runs@v2.1.2
+        uses: Mattraks/delete-workflow-runs@v2.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
