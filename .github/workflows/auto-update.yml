@@ -17,6 +17,7 @@ on:
 
 env:
   TZ: Asia/Shanghai
+  # 强制使用 Node.js 24（Node.js 20 将于 2026-06-02 弃用）
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -27,14 +28,17 @@ jobs:
       actions: write
     
     steps:
-      # Checkout the repository
-      - uses: actions/checkout@v4
+      # Checkout the repository - using latest version with Node.js 24 support
+      - uses: actions/checkout@v4.2.2
+        with:
+          persist-credentials: true
 
-      # Set up Python
+      # Set up Python - latest version
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.3.0
         with:
           python-version: '3.x'
+          cache: 'pip'
 
       # Install dependencies
       - name: Install dependencies
@@ -46,17 +50,18 @@ jobs:
         run: |
           bash ./script/build-combined-rules.sh
       
-      # Commit and push changes if detected
+      # Commit and push changes if detected - using latest version
       - name: Commit Changes
         id: commit
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v5.1.0
         with:
           commit_message: 'chore(ci): auto update domain rules'
           file_pattern: '*.mrs *.txt'
+          commit_options: '--signoff'
 
-      # Optional: Delete old workflow runs to save storage
+      # Optional: Delete old workflow runs to save storage - using latest version
       - name: Delete old workflow runs
-        uses: Mattraks/delete-workflow-runs@v2.1.0
+        uses: Mattraks/delete-workflow-runs@v2.1.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
