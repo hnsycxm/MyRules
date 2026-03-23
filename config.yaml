@@ -1,0 +1,46 @@
+# MyRules 配置文件
+
+# 全局设置
+global:
+  # 时区设置
+  timezone: "Asia/Shanghai"
+  # 日志级别: debug, info, warn, error
+  log_level: "info"
+
+# 规则处理设置
+rules:
+  # 是否启用子域名去重
+  remove_subdomains: true
+  # 是否启用域名验证
+  validate_domains: true
+  # 是否按字母顺序排序
+  sort_domains: true
+  # 处理的并发数
+  parallel_processes: 4
+
+# Mihomo 工具设置
+mihomo:
+  # 下载源: github, gitee (备用)
+  download_source: "github"
+  # 版本通道: Prerelease-Alpha, Stable
+  version_channel: "Prerelease-Alpha"
+  # 下载超时时间（秒）
+  timeout: 300
+
+# 输出设置
+output:
+  # 是否保留中间文件
+  keep_temp_files: false
+  # 是否添加版本信息到输出文件
+  add_version_info: true
+  # 输出格式: mrs, txt, both
+  formats: ["mrs"]
+
+# 通知设置（可选）
+notifications:
+  # 是否启用构建完成通知
+  enabled: false
+  # 通知方式: email, webhook
+  method: "webhook"
+  # Webhook URL
+  webhook_url: ""
