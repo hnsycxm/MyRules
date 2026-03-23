@@ -1,7 +1,12 @@
 #!/bin/bash
+# MyRules 构建脚本
+# 用于批量处理域名规则并生成 Mihomo 格式文件
+
+set -e  # 遇到错误立即退出
 
 # 切换到脚本所在目录
-cd $(cd "$(dirname "$0")";pwd)
+cd "$(cd "$(dirname "$0")" && pwd)" || exit 1
+PROJECT_ROOT="$(pwd)/.."
 
 # 清理可能存在的旧临时文件
 rm -f version.txt mihomo-* mihomo-*.exe
@@ -17,15 +22,47 @@ trap cleanup ERR EXIT INT TERM
 
 # 定义日志函数
 log() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] $@"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] $*"
 }
 
 error() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] $@" >&2
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] $*" >&2
+}
+
+# 检查 Python 是否安装
+check_python() {
+    if command -v python3 &> /dev/null; then
+        PYTHON_CMD="python3"
+    elif command -v python &> /dev/null; then
+        PYTHON_CMD="python"
+    else
+        error "未找到 Python，请先安装 Python 3.7+"
+        exit 1
+    fi
+    
+    # 检查 Python 版本
+    python_version=$($PYTHON_CMD --version 2>&1 | awk '{print $2}')
+    log "使用 Python 版本：$python_version"
 }
 
 # 获取 txt 目录下的所有 txt 文件
-TXT_FILES=$(find ../txt -maxdepth 1 -name "*.txt" -type f)
+TXT_DIR="$PROJECT_ROOT/txt"
+if [ ! -d "$TXT_DIR" ]; then
+    error "txt 目录不存在：$TXT_DIR"
+    exit 1
+fi
+
+TXT_FILES=$(find "$TXT_DIR" -maxdepth 1 -name "*.txt" -type f 2>/dev/null)
+
+if [ -z "$TXT_FILES" ]; then
+    error "在 txt 目录下没有找到任何 .txt 文件"
+    exit 1
+fi
+
+log "找到以下规则文件:"
+echo "$TXT_FILES" | while read -r file; do
+    log "  - $(basename "$file")"
+done
 
 # 函数：处理规则
 process_rules() {
@@ -49,15 +86,15 @@ process_rules() {
     log "已复制现有规则文件: $txt_file -> $domain_file"
 
     # 修复换行符并调用对应的 Python 脚本去重排序
-    sed -i 's/\r//' "$domain_file"
-    log "已修复换行符: $domain_file"
-
-    python "$script" "$domain_file"
+    sed -i 's/\r//' "$domain_file" 2>/dev/null || true
+    log "已修复换行符：$domain_file"
+    
+    $PYTHON_CMD "$script" "$domain_file"
     if [ $? -ne 0 ]; then
-        error "Python 脚本执行失败: $script"
+        error "Python 脚本执行失败：$script"
         return 1
     fi
-    log "Python 脚本执行完成: $script"
+    log "✅ Python 脚本执行完成：$script"
 
     # 转换为 Mihomo 格式
     sed "s/^/\\+\\./g" "$domain_file" > "$mihomo_txt_file"
@@ -69,12 +106,18 @@ process_rules() {
     log "Mihomo 工具转换完成: $mihomo_txt_file -> $mihomo_mrs_file"
 
     # 将生成的 .mrs 文件移动到上级目录
-    mv "$mihomo_mrs_file" "../$mihomo_mrs_file"
-    log "已将生成文件移动到上级目录: $mihomo_mrs_file"
+    mv "$mihomo_mrs_file" "$PROJECT_ROOT/$mihomo_mrs_file"
+    log "已生成规则文件：$PROJECT_ROOT/$mihomo_mrs_file"
     
     # 删除中间的 Mihomo 格式文本文件，只保留原始输入文件
     rm -f "$mihomo_txt_file"
-    log "已删除中间 Mihomo 格式文本文件: $mihomo_txt_file"
+    log "已删除中间文件：$mihomo_txt_file"
+    
+    # 如果不保留临时文件，则删除
+    if [ "${KEEP_TEMP_FILES:-false}" = "false" ]; then
+        rm -f "$domain_file"
+        log "已清理临时文件：$domain_file"
+    fi
 }
 
 # 下载 Mihomo 工具
@@ -146,21 +189,47 @@ setup_mihomo_tool() {
 }
 
 # 主流程
-setup_mihomo_tool
-
-# 并行处理所有检测到的 txt 文件
-for txt_file in $TXT_FILES; do
-    # 从文件名获取基本名称
-    filename=$(basename "$txt_file")
-    name="${filename%.*}"
+main() {
+    log "========================================"
+    log "MyRules 构建开始"
+    log "========================================"
     
-    # 统一使用 sort-clash.py 处理通用域名列表
-    script="sort-clash.py"
+    # 检查 Python
+    check_python
     
-    process_rules "$name" "$txt_file" "$script" &
-done
+    # 下载 Mihomo 工具
+    setup_mihomo_tool
+    
+    # 并行处理所有规则文件
+    log "开始批量处理规则文件..."
+    for txt_file in $TXT_FILES; do
+        # 从文件名获取基本名称
+        filename=$(basename "$txt_file")
+        name="${filename%.*}"
+        
+        # 统一使用 sort-clash.py 处理通用域名列表
+        script="sort-clash.py"
+        
+        log "创建后台任务：$name"
+        process_rules "$name" "$txt_file" "$script" &
+    done
+    
+    # 等待所有规则并行处理完成
+    wait
+    
+    log "========================================"
+    log "✅ 所有规则处理完成！"
+    log "========================================"
+    
+    # 显示生成的文件
+    log "生成的规则文件:"
+    find "$PROJECT_ROOT" -maxdepth 1 -name "*.mrs" -type f | while read -r mrs_file; do
+        filesize=$(du -h "$mrs_file" | cut -f1)
+        log "  - $(basename "$mrs_file") ($filesize)"
+    done
+    
+    log "脚本执行完成，临时文件将在退出时自动清理"
+}
 
-# 等待所有规则并行处理完成
-wait
-
-log "脚本执行完成，临时文件将在退出时自动清理"
+# 执行主流程
+main

@@ -1,6 +1,12 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+域名排序和去重脚本
+用于处理域名列表，执行去重、排序和子域名优化
+"""
+
 import sys
 import re
-import asyncio
 import os
 from pathlib import Path
 
@@ -40,9 +46,9 @@ def get_parent_domain(domain):
         return '.'.join(parts[-2:])
     return domain
 
-async def process_chunk(chunk):
+def process_chunk(chunk):
     """
-    异步处理文件块，提取域名规则
+    处理文件块，提取域名规则
     """
     domains = set()
     for line in chunk:
@@ -51,11 +57,11 @@ async def process_chunk(chunk):
             domains.add(domain)
     return domains
 
-async def read_lines(file_path):
+def read_lines(file_path):
     """
-    异步逐行读取文件
+    逐行读取文件
     """
-    with open(file_path, 'r', encoding='utf8') as f:
+    with open(file_path, 'r', encoding='utf-8') as f:
         while True:
             lines = f.readlines(10000)  # 每次读取 10KB
             if not lines:
@@ -90,45 +96,56 @@ def remove_subdomains(domains):
             result.append(domain)
     return set(result)
 
-async def main():
+def main():
+    """
+    主函数：处理域名文件
+    """
     if len(sys.argv) < 2:
         print("请提供输入文件路径作为参数")
-        return
+        print("用法：python sort-clash.py <文件名>")
+        sys.exit(1)
 
     file_name = sys.argv[1]
     
     # 检查文件是否存在
     if not os.path.exists(file_name):
-        print(f"错误：文件 {file_name} 不存在")
-        return
+        print(f"错误：文件 '{file_name}' 不存在")
+        sys.exit(1)
     
     if not os.path.isfile(file_name):
-        print(f"错误：{file_name} 不是一个有效的文件")
-        return
+        print(f"错误：'{file_name}' 不是一个有效的文件")
+        sys.exit(1)
 
     try:
-        # 按块处理文件
+        # 读取并处理文件
         domains = set()
-
-        async for chunk in read_lines(file_name):
-            chunk_domains = await process_chunk(chunk)
-            domains.update(chunk_domains)
+        
+        with open(file_name, 'r', encoding='utf-8') as f:
+            while True:
+                chunk = f.readlines(10000)
+                if not chunk:
+                    break
+                chunk_domains = process_chunk(chunk)
+                domains.update(chunk_domains)
 
         # 移除子域名，保留父域名
         filtered_domains = remove_subdomains(domains)
 
-        # 排序规则：按父域名和子域名排序
+        # 排序规则：按字母顺序排序
         sorted_domains = sorted(filtered_domains)
 
         # 写入文件
-        with open(file_name, 'w', encoding='utf8') as f:
+        with open(file_name, 'w', encoding='utf-8') as f:
             f.writelines(f"{domain}\n" for domain in sorted_domains)
 
-        print(f"处理完成，生成的规则总数为：{len(sorted_domains)}")
+        print(f"✅ 处理完成，生成的规则总数为：{len(sorted_domains)}")
+        
     except IOError as e:
-        print(f"文件操作错误: {e}")
+        print(f"❌ 文件操作错误：{e}")
+        sys.exit(1)
     except Exception as e:
-        print(f"处理过程中发生错误: {e}")
+        print(f"❌ 处理过程中发生错误：{e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

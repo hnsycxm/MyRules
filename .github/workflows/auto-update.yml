@@ -17,6 +17,7 @@ on:
 
 env:
   TZ: Asia/Shanghai
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   Update_Filters:
@@ -27,8 +28,19 @@ jobs:
     
     steps:
       # Checkout the repository
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
+      # Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # Install dependencies
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      
       # Run build script
       - name: Built Rules
         run: |
@@ -37,23 +49,16 @@ jobs:
       # Commit and push changes if detected
       - name: Commit Changes
         id: commit
-        uses: stefanzweifel/git-auto-commit-action@v4
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: 🚀 CI Updated
-
-      - name: GitHub Push
-        if: steps.commit.outputs.changes_detected == 'true'
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{secrets.GITHUB_TOKEN}}
-          branch: ${{github.ref}}
+          commit_message: 'chore(ci): auto update domain rules'
+          file_pattern: '*.mrs *.txt'
 
       # Optional: Delete old workflow runs to save storage
       - name: Delete old workflow runs
-        uses: Mattraks/delete-workflow-runs@v2
-        if: ${{ github.event_name != 'schedule' }}
+        uses: Mattraks/delete-workflow-runs@v2.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          retain_days: 30
-          keep_minimum_runs: 6
+          retain_days: 1
+          keep_minimum_runs: 3
