@@ -50,7 +50,7 @@ jobs:
 
       # Optional: Delete old workflow runs to save storage
       - name: Delete old workflow runs
-        uses: Mattraks/delete-workflow-runs@v3
+        uses: Mattraks/delete-workflow-runs@v2.0.6
         if: ${{ github.event_name != 'schedule' }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
