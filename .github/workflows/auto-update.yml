@@ -17,7 +17,6 @@ on:
 
 env:
   TZ: Asia/Shanghai
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   Update_Filters:
@@ -28,7 +27,7 @@ jobs:
     
     steps:
       # Checkout the repository
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Run build script
       - name: Built Rules
@@ -38,7 +37,7 @@ jobs:
       # Commit and push changes if detected
       - name: Commit Changes
         id: commit
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v6
         with:
           commit_message: 🚀 CI Updated
 
@@ -51,7 +50,7 @@ jobs:
 
       # Optional: Delete old workflow runs to save storage
       - name: Delete old workflow runs
-        uses: Mattraks/delete-workflow-runs@v2.1.0
+        uses: Mattraks/delete-workflow-runs@v3
         if: ${{ github.event_name != 'schedule' }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
