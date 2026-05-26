@@ -17,8 +17,8 @@ on:
 
 env:
   TZ: Asia/Shanghai
-  # 暂时使用 Node.js 20（等待 Actions 发布 Node.js 24 支持版本）
-  # 参考：https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+  # 提前使用 Node.js 24，避免 2026-06-02 后的兼容性问题
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   Update_Filters:
