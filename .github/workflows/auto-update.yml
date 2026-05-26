@@ -53,7 +53,7 @@ jobs:
       # Commit and push changes if detected
       - name: Commit Changes
         id: commit
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v4
         with:
           commit_message: 'chore(ci): auto update domain rules'
           file_pattern: '*.mrs *.txt'
