@@ -52,12 +52,16 @@ jobs:
       
       # Commit and push changes if detected
       - name: Commit Changes
-        id: commit
-        uses: stefanzweifel/git-auto-commit-action@v4
-        with:
-          commit_message: 'chore(ci): auto update domain rules'
-          file_pattern: '*.mrs *.txt'
-          commit_options: '--signoff'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add *.mrs *.txt
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore(ci): auto update domain rules" --signoff
+            git push
+          fi
 
       # Optional: Delete old workflow runs to save storage
       - name: Delete old workflow runs
