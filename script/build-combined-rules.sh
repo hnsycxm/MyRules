@@ -190,7 +190,7 @@ process_rules() {
 
     # 转换为 Mihomo 格式
     sed "s/^/\\+\\./g" "$domain_file" > "$mihomo_txt_file"
-    ./"$MIHOMO_TOOL" convert-ruleset domain text "$mihomo_txt_file" "$mihomo_mrs_file"
+    "$PROJECT_ROOT/$MIHOMO_TOOL" convert-ruleset domain text "$mihomo_txt_file" "$mihomo_mrs_file"
     if [ $? -ne 0 ]; then
         error "Mihomo 工具转换失败: $mihomo_txt_file"
         return 1
