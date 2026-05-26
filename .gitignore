@@ -28,6 +28,9 @@ mihomo-*
 mihomo-*.exe
 version.txt
 
+# Cache directory
+.cache/
+
 # Temporary files
 *_domain.txt
 *_Mihomo.txt
