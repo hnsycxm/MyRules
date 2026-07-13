@@ -17,26 +17,27 @@ on:
 
 env:
   TZ: Asia/Shanghai
-  # 提前使用 Node.js 24，避免 2026-06-02 后的兼容性问题
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+# 防止并发运行互相冲突
+concurrency:
+  group: auto-update-rules
+  cancel-in-progress: true
 
 jobs:
   Update_Filters:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      actions: write
-    
+
     steps:
       # Checkout the repository
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          persist-credentials: true
 
       # Set up Python
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.x'
           cache: 'pip'
@@ -45,12 +46,12 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-      
+
       # Run build script
-      - name: Built Rules
+      - name: Build Rules
         run: |
           bash ./script/build-combined-rules.sh
-      
+
       # Commit and push changes if detected
       - name: Commit Changes
         run: |
