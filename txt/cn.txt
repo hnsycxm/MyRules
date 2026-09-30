@@ -110,3 +110,4 @@ skk.moe
 tailscale.com
 uc000.com
 internetdownloadmanager.com
+gh-proxy.com
