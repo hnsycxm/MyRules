@@ -55,10 +55,10 @@ jobs:
           if [ -z "$VERSION" ]; then VERSION="v1.18.10"; fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
-      # 2. 缓存 Mihomo 可执行文件（命中缓存则跳过下载）
+      # 2. 缓存 Mihomo 可执行文件（已升级至 v5 适配 Node.js 24）
       - name: Cache Mihomo CLI
         id: cache-mihomo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /usr/local/bin/mihomo
           key: mihomo-bin-${{ steps.get-version.outputs.version }}
