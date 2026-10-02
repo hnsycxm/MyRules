@@ -1,6 +1,6 @@
 #!/bin/bash
 # MyRules 构建脚本
-# 用于批量处理域名/IP规则并生成 Mihomo 格式文件至 mrs 目录
+# 支持自动识别域名规则与 IP 规则，并分别编译为 Mihomo 格式保存至 /mrs 目录
 
 set -e  # 遇到错误立即退出
 
@@ -21,7 +21,7 @@ error() {
 
 cleanup() {
     log "检测到退出，正在清理临时文件..."
-    rm -f ./*_domain.txt ./*_ip.txt ./*_Mihomo.txt version.txt
+    rm -f ./*_temp.txt ./*_Mihomo.txt version.txt
     [ -n "$TASK_DIR" ] && rm -rf "$TASK_DIR" 2>/dev/null || true
 }
 
@@ -117,11 +117,11 @@ setup_mihomo_tool() {
     log "已加载 Mihomo 可执行文件: $MIHOMO_BIN"
 }
 
-# 核心：处理规则并转换为二进制文件保存至 /mrs 目录
+# 核心：处理规则（自动判断 IP 或 域名 规则集）
 process_rules() {
     local name=$1
     local txt_file=$2
-    local domain_temp="${name}_domain.txt"
+    local temp_txt="${name}_temp.txt"
     local mihomo_txt_file="${name}_Mihomo.txt"
     local target_mrs_file="$MRS_DIR/${name}.mrs"
 
@@ -132,29 +132,68 @@ process_rules() {
         return 1
     fi
 
-    cp "$txt_file" "$domain_temp"
-    sed -i 's/\r//' "$domain_temp" 2>/dev/null || true
+    # 判断文件中 IP 行数与域名行数的比例，自动决定处理分支
+    local is_ip_ruleset=false
+    is_ip_ruleset=$($PYTHON_CMD -c "
+import re
+ip_cnt = 0
+domain_cnt = 0
+ip_pattern = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?\b')
+with open('$txt_file', 'r', encoding='utf-8', errors='ignore') as f:
+    for line in f:
+        line = line.strip()
+        if not line or line.startswith('#'): continue
+        if ip_pattern.search(line):
+            ip_cnt += 1
+        else:
+            domain_cnt += 1
+print('true' if ip_cnt > domain_cnt else 'false')
+" 2>/dev/null || echo "false")
 
-    # 调用 Python 脚本对域名清洗、过滤子域名并排序
-    $PYTHON_CMD "$PROJECT_ROOT/script/sort-clash.py" "$domain_temp" --config "$CONFIG_FILE" || {
-        error "Python 脚本执行失败：sort-clash.py ($name)"
-        return 1
-    }
+    if [ "$is_ip_ruleset" = "true" ]; then
+        log "检测到 $name 为 IP 规则集"
+        # 提取并格式化 IP (保证包含 CIDR 掩码)
+        $PYTHON_CMD -c "
+import re
+ip_pattern = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?\b')
+ips = set()
+with open('$txt_file', 'r', encoding='utf-8', errors='ignore') as f:
+    for line in f:
+        found = ip_pattern.findall(line)
+        for ip in found:
+            ips.add(ip if '/' in ip else ip + '/32')
+with open('$temp_txt', 'w', encoding='utf-8') as out:
+    out.write('\n'.join(sorted(ips)) + '\n')
+"
+        if [ -s "$temp_txt" ]; then
+            "$MIHOMO_BIN" convert-ruleset ipcidr text "$temp_txt" "$target_mrs_file"
+            log "✅ 成功生成 IP 规则集：$target_mrs_file"
+        else
+            log "⚠️ 警告：$txt_file 未提取到有效 IP，跳过生成"
+        fi
 
-    # 读取清洗后的文本判断是否包含有效域名
-    if [ -s "$domain_temp" ]; then
-        # 为每行域名添加 +. 前缀（用于 DOMAIN-SUFFIX 后缀全匹配）
-        sed "s/^/\\+\\./g" "$domain_temp" > "$mihomo_txt_file"
-        
-        # 编译为 .mrs 规则集并存入 mrs 文件夹
-        "$MIHOMO_BIN" convert-ruleset domain text "$mihomo_txt_file" "$target_mrs_file"
-        log "✅ 成功生成域名规则集：$target_mrs_file"
     else
-        log "⚠️️ 警告：$txt_file 处理后无有效域名，跳过生成"
+        log "检测到 $name 为域名规则集"
+        cp "$txt_file" "$temp_txt"
+        sed -i 's/\r//' "$temp_txt" 2>/dev/null || true
+
+        # 调用 sort-clash.py 处理域名
+        $PYTHON_CMD "$PROJECT_ROOT/script/sort-clash.py" "$temp_txt" --config "$CONFIG_FILE" || {
+            error "Python 脚本执行失败：sort-clash.py ($name)"
+            return 1
+        }
+
+        if [ -s "$temp_txt" ]; then
+            sed "s/^/\\+\\./g" "$temp_txt" > "$mihomo_txt_file"
+            "$MIHOMO_BIN" convert-ruleset domain text "$mihomo_txt_file" "$target_mrs_file"
+            log "✅ 成功生成域名规则集：$target_mrs_file"
+        else
+            log "⚠️ 警告：$txt_file 处理后无有效域名，跳过生成"
+        fi
     fi
 
     # 清理过程中间文件
-    rm -f "$mihomo_txt_file" "$domain_temp"
+    rm -f "$mihomo_txt_file" "$temp_txt"
 }
 
 export -f process_rules log error
