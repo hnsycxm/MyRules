@@ -45,7 +45,7 @@ jobs:
       # 安装 Python 依赖
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          pip install -r requirements.txt || true
 
       # 1. 获取 Mihomo 最新版本号
       - name: Get Mihomo Version
@@ -86,80 +86,11 @@ jobs:
           chmod +x /usr/local/bin/mihomo || true
           mihomo -v
 
-      # 5. 逐个文件扫描并编译为对应的 .mrs 文件
-      - name: Build Rules for Each File
+      # 5. 执行项目逻辑脚本进行编译
+      - name: Build Rules
         run: |
-          # 运行原本的构建脚本（若存在）
-          bash ./script/build-combined-rules.sh || true
-
-          # 执行 Python 转换程序
-          python3 -c "
-          import os, re, subprocess
-
-          txt_dir = 'txt'
-          ip_pattern = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?\b')
-          domain_pattern = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9-]*(\.[a-zA-Z0-9-]+)+$')
-
-          if os.path.exists(txt_dir):
-              for root, _, files in os.walk(txt_dir):
-                  for file in files:
-                      if file.endswith('.txt'):
-                          file_path = os.path.join(root, file)
-                          base_name = os.path.splitext(file)[0]
-                          output_mrs = f'{base_name}.mrs'
-                          
-                          ips = set()
-                          domains = set()
-
-                          with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                              for line in f:
-                                  line = line.strip()
-                                  if not line or line.startswith('#'):
-                                      continue
-
-                                  # 判断是否包含 IP
-                                  found_ips = ip_pattern.findall(line)
-                                  if found_ips:
-                                      for ip in found_ips:
-                                          ips.add(ip if '/' in ip else ip + '/32')
-                                      continue
-
-                                  # 1. 移除常见前缀 (payload:, DOMAIN-SUFFIX,, DOMAIN,)
-                                  cleaned = re.sub(r'^(payload:|DOMAIN-KEYWORD|DOMAIN-SUFFIX|DOMAIN|PROCESS-NAME)\s*,\s*', '', line, flags=re.I)
-                                  # 2. 清理行首修饰符 (+, *, 各种引号和空格)
-                                  cleaned = re.sub(r'^[+*\s\'\"]+', '', cleaned).rstrip('\'\" ')
-
-                                  # 3. 提取标准域名，并在开头补 '.' 以实现 DOMAIN-SUFFIX 后缀匹配
-                                  if cleaned.startswith('.'):
-                                      raw_domain = cleaned.lstrip('.')
-                                      if domain_pattern.match(raw_domain):
-                                          domains.add('.' + raw_domain)
-                                  elif domain_pattern.match(cleaned):
-                                      domains.add('.' + cleaned)
-
-                          # 优先判断：如果提取出的 IP 数量比域名多，当作 IP 规则集处理
-                          if len(ips) > len(domains):
-                              temp_file = f'_temp_{base_name}_ip.txt'
-                              with open(temp_file, 'w', encoding='utf-8') as tf:
-                                  tf.write('\n'.join(sorted(ips)) + '\n')
-                              
-                              print(f'正在编译 IP 规则集: {file} -> {output_mrs} ({len(ips)} 条)')
-                              subprocess.run(['mihomo', 'convert-ruleset', 'ipcidr', 'text', temp_file, output_mrs], check=True)
-                              os.remove(temp_file)
-
-                          # 否则当作域名规则集处理
-                          elif len(domains) > 0:
-                              temp_file = f'_temp_{base_name}_domain.txt'
-                              with open(temp_file, 'w', encoding='utf-8') as tf:
-                                  tf.write('\n'.join(sorted(domains)) + '\n')
-
-                              print(f'正在编译域名规则集: {file} -> {output_mrs} ({len(domains)} 条)')
-                              subprocess.run(['mihomo', 'convert-ruleset', 'domain', 'text', temp_file, output_mrs], check=True)
-                              os.remove(temp_file)
-                          
-                          else:
-                              print(f'跳过文件 {file}: 未检测到有效 IP 或域名')
-          "
+          chmod +x ./script/build-combined-rules.sh
+          ./script/build-combined-rules.sh
 
       # 6. 检测到文件改动时自动提交并推送
       - name: Commit Changes
