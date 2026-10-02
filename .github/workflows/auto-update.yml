@@ -30,33 +30,69 @@ jobs:
       contents: write
 
     steps:
-      # Checkout the repository
+      # 检出仓库代码
       - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Set up Python
+      # 配置 Python 环境
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.x'
           cache: 'pip'
 
-      # Install dependencies
+      # 安装 Python 依赖
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
 
-      # 安装 Mihomo CLI 工具
-      - name: Setup Mihomo
+      # 1. 获取 Mihomo 最新版本号
+      - name: Get Mihomo Version
+        id: get-version
         run: |
-          MIHOMO_VERSION=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-          curl -sSL "https://github.com/MetaCubeX/mihomo/releases/download/${MIHOMO_VERSION}/mihomo-linux-amd64-${MIHOMO_VERSION}.gz" | gunzip > /usr/local/bin/mihomo
+          VERSION=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || echo "v1.18.10")
+          if [ -z "$VERSION" ]; then VERSION="v1.18.10"; fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      # 2. 缓存 Mihomo 可执行文件（命中缓存则跳过下载）
+      - name: Cache Mihomo CLI
+        id: cache-mihomo
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/mihomo
+          key: mihomo-bin-${{ steps.get-version.outputs.version }}
+
+      # 3. 安装 Mihomo CLI（无缓存时执行）
+      - name: Setup Mihomo
+        if: steps.cache-mihomo.outputs.cache-hit != 'true'
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          echo "Downloading Mihomo Version: ${VERSION}"
+          
+          DOWNLOAD_URL="https://github.com/MetaCubeX/mihomo/releases/download/${VERSION}/mihomo-linux-amd64-${VERSION}.gz"
+          if ! curl -sSL -f "$DOWNLOAD_URL" -o mihomo.gz; then
+            DOWNLOAD_URL="https://github.com/MetaCubeX/mihomo/releases/download/${VERSION}/mihomo-linux-amd64-compatible-${VERSION}.gz"
+            curl -sSL -f "$DOWNLOAD_URL" -o mihomo.gz
+          fi
+
+          gzip -d -f mihomo.gz
+          mv mihomo /usr/local/bin/mihomo
           chmod +x /usr/local/bin/mihomo
 
-      # 逐个文件判断 IP/域名，独立编译为对应的 .mrs
+      # 4. 验证 Mihomo 是否就绪
+      - name: Verify Mihomo
+        run: |
+          chmod +x /usr/local/bin/mihomo || true
+          mihomo -v
+
+      # 5. 逐个文件扫描并编译为对应的 .mrs 文件
       - name: Build Rules for Each File
         run: |
+          # 运行原本的构建脚本（若存在）
+          bash ./script/build-combined-rules.sh || true
+
+          # 执行 Python 转换程序
           python3 -c "
           import os, re, subprocess
 
@@ -88,12 +124,12 @@ jobs:
                                           ips.add(ip if '/' in ip else ip + '/32')
                                       continue
 
-                                  # 清理前缀提取域名
+                                  # 清理前缀并提取域名
                                   cleaned = re.sub(r'^(payload:|[-+*.\s]|DOMAIN(-SUFFIX)?,\s*)*', '', line, flags=re.I).strip(\"'\\\" \")
                                   if domain_pattern.match(cleaned):
                                       domains.add(cleaned)
 
-                          # 优先判断：如果该 txt 中提取出的 IP 数量多于域名，则当作 IP 规则集转换
+                          # 优先判断：如果提取出的 IP 数量比域名多，当作 IP 规则集处理
                           if len(ips) > len(domains):
                               temp_file = f'_temp_{base_name}_ip.txt'
                               with open(temp_file, 'w', encoding='utf-8') as tf:
@@ -103,7 +139,7 @@ jobs:
                               subprocess.run(['mihomo', 'convert-ruleset', 'ipcidr', 'text', temp_file, output_mrs], check=True)
                               os.remove(temp_file)
 
-                          # 否则（域名数量多或仅有域名），当作 域名 规则集转换
+                          # 否则当作域名规则集处理
                           elif len(domains) > 0:
                               temp_file = f'_temp_{base_name}_domain.txt'
                               with open(temp_file, 'w', encoding='utf-8') as tf:
@@ -114,10 +150,10 @@ jobs:
                               os.remove(temp_file)
                           
                           else:
-                              print(f'跳过文件 {file}: 未匹配到有效 IP 或域名')
+                              print(f'跳过文件 {file}: 未检测到有效 IP 或域名')
           "
 
-      # Commit and push changes if detected
+      # 6. 检测到文件改动时自动提交并推送
       - name: Commit Changes
         run: |
           git config user.name "github-actions[bot]"
