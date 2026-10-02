@@ -1,6 +1,6 @@
 #!/bin/bash
 # MyRules 构建脚本
-# 用于批量处理域名/IP规则并生成 Mihomo 格式文件
+# 用于批量处理域名/IP规则并生成 Mihomo 格式文件至 mrs 目录
 
 set -e  # 遇到错误立即退出
 
@@ -8,6 +8,7 @@ set -e  # 遇到错误立即退出
 cd "$(cd "$(dirname "$0")" && pwd)" || exit 1
 PROJECT_ROOT="$(pwd)/.."
 CONFIG_FILE="$PROJECT_ROOT/config.yaml"
+MRS_DIR="$PROJECT_ROOT/mrs"
 TASK_DIR=""
 
 log() {
@@ -116,13 +117,13 @@ setup_mihomo_tool() {
     log "已加载 Mihomo 可执行文件: $MIHOMO_BIN"
 }
 
-# 核心：处理规则并转换为二进制 .mrs
+# 核心：处理规则并转换为二进制文件保存至 /mrs 目录
 process_rules() {
     local name=$1
     local txt_file=$2
     local domain_temp="${name}_domain.txt"
     local mihomo_txt_file="${name}_Mihomo.txt"
-    local mihomo_mrs_file="${name}.mrs"
+    local target_mrs_file="$MRS_DIR/${name}.mrs"
 
     log "开始处理规则: $name"
 
@@ -145,11 +146,11 @@ process_rules() {
         # 为每行域名添加 +. 前缀（用于 DOMAIN-SUFFIX 后缀全匹配）
         sed "s/^/\\+\\./g" "$domain_temp" > "$mihomo_txt_file"
         
-        # 编译为 .mrs 规则集
-        "$MIHOMO_BIN" convert-ruleset domain text "$mihomo_txt_file" "$PROJECT_ROOT/$mihomo_mrs_file"
-        log "✅ 成功生成域名规则集：$PROJECT_ROOT/$mihomo_mrs_file"
+        # 编译为 .mrs 规则集并存入 mrs 文件夹
+        "$MIHOMO_BIN" convert-ruleset domain text "$mihomo_txt_file" "$target_mrs_file"
+        log "✅ 成功生成域名规则集：$target_mrs_file"
     else
-        log "⚠️ 警告：$txt_file 处理后无有效域名，跳过生成"
+        log "⚠️️ 警告：$txt_file 处理后无有效域名，跳过生成"
     fi
 
     # 清理过程中间文件
@@ -157,7 +158,7 @@ process_rules() {
 }
 
 export -f process_rules log error
-export PYTHON_CMD PROJECT_ROOT MIHOMO_BIN CONFIG_FILE
+export PYTHON_CMD PROJECT_ROOT MRS_DIR MIHOMO_BIN CONFIG_FILE
 
 main() {
     log "========================================"
@@ -168,6 +169,9 @@ main() {
     load_config
     get_txt_files
     setup_mihomo_tool
+
+    # 确保根目录下 mrs 文件夹存在
+    mkdir -p "$MRS_DIR"
 
     TASK_DIR=$(mktemp -d)
 
