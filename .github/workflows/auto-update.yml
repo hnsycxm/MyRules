@@ -47,10 +47,75 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      # Run build script
-      - name: Build Rules
+      # 安装 Mihomo CLI 工具
+      - name: Setup Mihomo
         run: |
-          bash ./script/build-combined-rules.sh
+          MIHOMO_VERSION=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          curl -sSL "https://github.com/MetaCubeX/mihomo/releases/download/${MIHOMO_VERSION}/mihomo-linux-amd64-${MIHOMO_VERSION}.gz" | gunzip > /usr/local/bin/mihomo
+          chmod +x /usr/local/bin/mihomo
+
+      # 逐个文件判断 IP/域名，独立编译为对应的 .mrs
+      - name: Build Rules for Each File
+        run: |
+          python3 -c "
+          import os, re, subprocess
+
+          txt_dir = 'txt'
+          ip_pattern = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?\b')
+          domain_pattern = re.compile(r'^[a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,}$')
+
+          if os.path.exists(txt_dir):
+              for root, _, files in os.walk(txt_dir):
+                  for file in files:
+                      if file.endswith('.txt'):
+                          file_path = os.path.join(root, file)
+                          base_name = os.path.splitext(file)[0]
+                          output_mrs = f'{base_name}.mrs'
+                          
+                          ips = set()
+                          domains = set()
+
+                          with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                              for line in f:
+                                  line = line.strip()
+                                  if not line or line.startswith('#'):
+                                      continue
+
+                                  # 判断是否包含 IP
+                                  found_ips = ip_pattern.findall(line)
+                                  if found_ips:
+                                      for ip in found_ips:
+                                          ips.add(ip if '/' in ip else ip + '/32')
+                                      continue
+
+                                  # 清理前缀提取域名
+                                  cleaned = re.sub(r'^(payload:|[-+*.\s]|DOMAIN(-SUFFIX)?,\s*)*', '', line, flags=re.I).strip(\"'\\\" \")
+                                  if domain_pattern.match(cleaned):
+                                      domains.add(cleaned)
+
+                          # 优先判断：如果该 txt 中提取出的 IP 数量多于域名，则当作 IP 规则集转换
+                          if len(ips) > len(domains):
+                              temp_file = f'_temp_{base_name}_ip.txt'
+                              with open(temp_file, 'w', encoding='utf-8') as tf:
+                                  tf.write('\n'.join(sorted(ips)) + '\n')
+                              
+                              print(f'正在编译 IP 规则集: {file} -> {output_mrs} ({len(ips)} 条)')
+                              subprocess.run(['mihomo', 'convert-ruleset', 'ipcidr', 'text', temp_file, output_mrs], check=True)
+                              os.remove(temp_file)
+
+                          # 否则（域名数量多或仅有域名），当作 域名 规则集转换
+                          elif len(domains) > 0:
+                              temp_file = f'_temp_{base_name}_domain.txt'
+                              with open(temp_file, 'w', encoding='utf-8') as tf:
+                                  tf.write('\n'.join(sorted(domains)) + '\n')
+
+                              print(f'正在编译域名规则集: {file} -> {output_mrs} ({len(domains)} 条)')
+                              subprocess.run(['mihomo', 'convert-ruleset', 'domain', 'text', temp_file, output_mrs], check=True)
+                              os.remove(temp_file)
+                          
+                          else:
+                              print(f'跳过文件 {file}: 未匹配到有效 IP 或域名')
+          "
 
       # Commit and push changes if detected
       - name: Commit Changes
@@ -61,6 +126,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "chore(ci): auto update domain rules" --signoff
+            git commit -m "chore(ci): auto convert txt files to mrs rulesets" --signoff
             git push
           fi
