@@ -10,7 +10,48 @@ import re
 import os
 from pathlib import Path
 from typing import Optional, Set, List, Dict, Any
-import yaml
+
+# PyYAML 是唯一的外部依赖：缺失时回退到默认配置，而不是让构建整体失败
+try:
+    import yaml
+except ImportError:  # pragma: no cover - 取决于运行环境
+    yaml = None  # type: ignore[assignment]
+
+# 多段公共后缀（不完整的 PSL 子集）。
+# 作用：当清单里误写了 "co.jp" 这类过宽的父域时，不再让它把
+# "dmm.co.jp"、"amazon.co.jp" 等真实域名整片吸收掉。
+MULTI_PART_PUBLIC_SUFFIXES: frozenset = frozenset({
+    # 日本
+    'co.jp', 'ne.jp', 'or.jp', 'ac.jp', 'ad.jp', 'ed.jp', 'go.jp', 'gr.jp', 'lg.jp',
+    # 中国大陆
+    'com.cn', 'net.cn', 'org.cn', 'gov.cn', 'edu.cn', 'ac.cn',
+    # 港台
+    'com.hk', 'org.hk', 'net.hk', 'edu.hk', 'gov.hk',
+    'com.tw', 'org.tw', 'net.tw', 'edu.tw', 'gov.tw',
+    # 英国
+    'co.uk', 'org.uk', 'me.uk', 'ac.uk', 'gov.uk', 'net.uk', 'sch.uk',
+    # 其他常见
+    'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au',
+    'com.br', 'com.mx', 'com.ar', 'com.tr', 'com.sg', 'com.my', 'com.ph',
+    'co.kr', 'or.kr', 'ne.kr', 'go.kr', 're.kr',
+    'co.nz', 'co.za', 'co.in', 'co.id', 'co.th', 'co.il',
+    # 托管平台（常见于规则清单）
+    'github.io', 'gitee.io', 'gitlab.io', 'pages.dev', 'workers.dev',
+    'vercel.app', 'netlify.app', 'herokuapp.com', 'blogspot.com',
+    'cloudfront.net', 'azurewebsites.net', 'appspot.com',
+})
+
+# 规则语法前缀，这类行不是裸域名
+RULE_PREFIXES: tuple = (
+    'payload:',
+    '#',
+    '!',
+    'DOMAIN,',
+    'DOMAIN-KEYWORD,',
+    'DOMAIN-SUFFIX,',
+    'IP-CIDR,',
+    'IP-CIDR6,',
+)
 
 
 def load_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
@@ -27,7 +68,7 @@ def load_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
         'rules': {
             'remove_subdomains': True,
             'validate_domains': True,
-            'sort_domains': True
+            'sort_domains': True,
         }
     }
 
@@ -39,6 +80,10 @@ def load_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
         print(f"警告：配置文件不存在 {config_path}，使用默认配置")
         return default_config
 
+    if yaml is None:
+        print("警告：未安装 PyYAML（pip install -r requirements.txt），使用默认配置")
+        return default_config
+
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
@@ -46,8 +91,8 @@ def load_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
                 print("警告：配置文件格式错误，使用默认配置")
                 return default_config
             # 合并默认配置
-            if 'rules' not in config:
-                config['rules'] = default_config['rules']
+            if 'rules' not in config or not isinstance(config.get('rules'), dict):
+                config['rules'] = dict(default_config['rules'])
             else:
                 for key, value in default_config['rules'].items():
                     if key not in config['rules']:
@@ -94,6 +139,31 @@ def is_valid_domain(domain: str) -> bool:
     return True
 
 
+def is_public_suffix(domain: str) -> bool:
+    """
+    判断域名是否为已知的多段公共后缀（例如 co.jp）。
+
+    这类域名本身可以保留在清单里，但不应当作为父域去吸收其他域名。
+    """
+    lowered = domain.lower()
+    if lowered in MULTI_PART_PUBLIC_SUFFIXES:
+        return True
+    # 单标签域名（如 "com"）同样不能作为父域
+    if '.' not in lowered:
+        return True
+    return False
+
+
+def can_absorb_subdomains(domain: str) -> bool:
+    """
+    判断某个域名是否有资格作为「父域」吸收其子域。
+
+    普通父域（example.com）可以；公共后缀（co.jp）不可以，
+    这样 "co.jp" 就不会把 "dmm.co.jp"、"amazon.co.jp" 一并吞掉。
+    """
+    return not is_public_suffix(domain)
+
+
 def extract_domain(line: str, validate: bool = True) -> Optional[str]:
     """
     从规则中提取有效域名
@@ -110,23 +180,28 @@ def extract_domain(line: str, validate: bool = True) -> Optional[str]:
         return None
 
     # 跳过非域名行
-    skip_prefixes = ('payload:', '#', '!', 'DOMAIN,', 'DOMAIN-KEYWORD,',
-                     'DOMAIN-SUFFIX,', 'IP-CIDR,', 'IP-CIDR6,')
-    if line.startswith(skip_prefixes):
+    if line.startswith(RULE_PREFIXES):
         return None
 
-    # 提取域名
-    if line.startswith('+.'):
-        domain = line[2:].strip()
+    # 按前缀从长到短匹配：旧版把 '  - \\' 放在 '- \\' 之后，导致它永远不生效
+    if line.startswith('  - \\'):
+        domain = line[5:]
     elif line.startswith('- \\'):
-        domain = line[3:].strip().rstrip('\\').strip()
-    elif line.startswith('  - \\'):
-        domain = line[5:].strip().rstrip('\\').strip()
+        domain = line[3:]
+    elif line.startswith('+.'):
+        domain = line[2:]
     elif '.' in line and not line.startswith('+'):
-        domain = line.strip()
+        domain = line
     else:
         return None
 
+    # 去掉 YAML 行尾的续行反斜杠与空白
+    domain = domain.strip()
+    if domain.endswith('\\'):
+        domain = domain[:-1].strip()
+
+    # 忽略末尾多余的点（"example.com." 与 "example.com" 等价）
+    domain = domain.rstrip('.').strip()
     if not domain:
         return None
 
@@ -140,18 +215,38 @@ def remove_subdomains(domains: Set[str]) -> Set[str]:
     """
     移除子域名，只保留父域名
 
+    公共后缀（如 co.jp）不会被当作父域，避免误删真实域名。
+
     Args:
         domains: 域名集合
 
     Returns:
         过滤后的域名集合
     """
+    # 按反转字符串排序：父域总是紧挨在它的子域之前
     sorted_domains = sorted(domains, key=lambda d: d[::-1])
-    result: List[str] = []
+    kept: List[str] = []
+    kept_set: Set[str] = set()
+    verbose = bool(os.environ.get('MYRULES_VERBOSE'))
+
     for domain in sorted_domains:
-        if not result or not domain.endswith("." + result[-1]):
-            result.append(domain)
-    return set(result)
+        # 自右向左找已保留的父域：父域最多比子域少一级标签，
+        # 因此反转字典序下只需回看最近保留的那一个
+        parent = None
+        if kept:
+            candidate = kept[-1]
+            if domain.endswith('.' + candidate):
+                parent = candidate
+
+        if parent is not None and can_absorb_subdomains(parent):
+            if verbose:
+                print(f"  [子域归并] {domain} 已被 {parent} 覆盖")
+            continue
+
+        kept.append(domain)
+        kept_set.add(domain)
+
+    return kept_set
 
 
 def process_domains(file_name: str, rules_config: Dict[str, Any]) -> int:
@@ -169,11 +264,15 @@ def process_domains(file_name: str, rules_config: Dict[str, Any]) -> int:
 
     # 读取并提取域名
     domains: Set[str] = set()
+    dropped: List[str] = []
     with open(file_name, 'r', encoding='utf-8') as f:
         for line in f:
-            domain = extract_domain(line, validate=validate)
+            stripped = line.strip()
+            domain = extract_domain(stripped, validate=validate)
             if domain:
                 domains.add(domain)
+            elif validate and stripped and not stripped.startswith(RULE_PREFIXES):
+                dropped.append(stripped)
 
     # 根据配置决定是否移除子域名
     if rules_config.get('remove_subdomains', True):
@@ -188,6 +287,10 @@ def process_domains(file_name: str, rules_config: Dict[str, Any]) -> int:
     # 写入文件
     with open(file_name, 'w', encoding='utf-8') as f:
         f.writelines(f"{domain}\n" for domain in sorted_domains)
+
+    if dropped:
+        preview = ', '.join(dropped[:5]) + (" …" if len(dropped) > 5 else "")
+        print(f"⚠️ 跳过 {len(dropped)} 行无法解析为域名的内容：{preview}")
 
     return len(sorted_domains)
 
