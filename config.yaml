@@ -1,0 +1,14 @@
+# MyRules 配置文件
+# 注意：仅保留被脚本实际消费的配置项；
+# 构建逻辑（mihomo 下载/版本）由 .github/workflows/auto-update.yml 负责。
+
+# 规则处理设置
+rules:
+  # 是否启用子域名去重（保留父域名）
+  remove_subdomains: true
+  # 是否启用域名格式验证
+  validate_domains: true
+  # 是否按字母顺序排序
+  sort_domains: true
+  # 构建脚本并行处理文件数
+  parallel_processes: 4
