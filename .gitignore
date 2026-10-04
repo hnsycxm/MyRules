@@ -23,22 +23,16 @@ wheels/
 .installed.cfg
 *.egg
 
-# Mihomo tools
-mihomo-*
-mihomo-*.exe
-version.txt
-
 # Cache directory
 .cache/
 
-# Temporary files
+# 构建中间文件（与 script/build-combined-rules.sh 的 cleanup 保持一致）
 *_temp.txt
+*_ip.txt
 *_domain.txt
 *_Mihomo.txt
+version.txt
 *.tmp
-
-# Version file
-version.json
 
 # IDE
 .vscode/
