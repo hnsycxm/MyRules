@@ -155,3 +155,4 @@ remit.ee
 gh-proxy.org
 getloli.com
 iotwish.com
+sing-box.sagernet.org
