@@ -155,3 +155,5 @@ remit.ee
 gh-proxy.org
 getloli.com
 iotwish.com
+90apt.com
+budingui.com
