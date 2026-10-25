@@ -12,6 +12,7 @@
 333291.xyz
 360kan.com
 365ting.com
+3688baihuo.com
 45hk.com
 4c44.com
 4kzn.cc
@@ -22,6 +23,7 @@
 6a7nnf7.com
 6huo.com
 7moor-fs2.com
+7x24cc.com
 87333.cc
 888484.xyz
 90apt.com
@@ -31,17 +33,18 @@
 adfg8.vip
 aipanso.com
 alidns.com
+alililibaba.uk
 alipayobjects.com
 amemv.com
 atianqi.com
 auete.top
 baicanuc.cn
 baidu.com
+baidupcs.com
 bakstotre.com
 bdjuhe.com
 bfvp26.com
 bilibili.com
-budingui.com
 butueaa.cn
 bytedance.com
 bytedance.net
@@ -56,7 +59,10 @@ cycani.org
 dbankcdn.com
 dbankcloud.com
 dbokutv.com
+dbzy3.com
+dbzy5.com
 dj92.cc
+djicdn.com
 doh.pub
 doubanio.com
 doubao.com
@@ -97,6 +103,7 @@ huya.com
 hwccpc.com
 hzlfm.com
 ikanbot.eu.org
+imgzy360.com
 in-addr.arpa
 internetdownloadmanager.com
 iotwish.com
@@ -116,6 +123,7 @@ libvio.io
 libvio.pw
 libvio.site
 libviobd.com
+lzipic.com
 maihaolian.com
 mddcloud.com.cn
 mdzyapi.com
@@ -128,10 +136,12 @@ moji.com
 muoua.top
 muouso.fun
 myanimelist.net
+myhuaweicloud.com
 n0909.com
 ok213.top
 ok321.top
 ok521.top
+onewsvod.com
 opendoor.sbs
 openwrt.ai
 pan1.me
@@ -141,8 +151,10 @@ picbf.com
 pppoe.top
 ppqrrs.com
 qmplaylet.com
+qpic.cn
 qq.com
 qtfm.cn
+quark.cn
 qupanshe.com
 qwfilm.com
 qwfun.com
@@ -158,6 +170,7 @@ ry-pic.com
 ryzypics.com
 seedhub.cc
 shandian.blog
+shandianpic.com
 shytkjgs.com
 sizhengxt.com
 skk.moe
@@ -165,6 +178,7 @@ skyworthbox.com
 skyworthdigital.com
 skyworthdigitaliot.com
 snssdk.com
+snzypic.com
 snzypic.vip
 star2.cn
 tailscale.com
@@ -179,6 +193,7 @@ tscjzy.com
 ttwebview.com
 tutu.pm
 tyyswimg2.com
+uc.cn
 uc000.com
 uc108.com
 uc108.net
@@ -201,6 +216,7 @@ wwgz.cn
 xhww.net
 xiaocge.fun
 xiaomi666.fun
+xinlangtupian.com
 xn--10vr61a3xc5x3b.com
 xn--4kq62z5rby2qupq9ub.top
 xn--74qy8dk4drvg29x.com
@@ -211,6 +227,7 @@ xn--sss604efuw.com
 xn--vcsx1ip8b8w4i.com
 xn--wcv59z.com
 xuexizhinan.com
+xunlei.com
 xxmu.top
 xxooo.cf
 xycdn.com
