@@ -91,6 +91,7 @@ guangyapan.com
 gxnas.com
 gying.net
 haimianxz.com
+hdslb.com
 hezids.com
 hgeme.com
 hippoaixue.com
@@ -127,6 +128,7 @@ lzipic.com
 maihaolian.com
 mddcloud.com.cn
 mdzyapi.com
+meitudata.com
 mgtv.com
 mihdr.top
 miqk.cc
@@ -150,6 +152,7 @@ pianku.online
 picbf.com
 pppoe.top
 ppqrrs.com
+qingting.fm
 qmplaylet.com
 qpic.cn
 qq.com
@@ -197,6 +200,7 @@ uc.cn
 uc000.com
 uc108.com
 uc108.net
+ukuapi88.com
 umygrx3.com
 v3mh.com
 vbing.me
@@ -211,7 +215,9 @@ wogg.live
 wogg.lol
 wogg.net
 wogg.one
+wolongzywcdn3.com
 wsyzy.org
+wtzw.com
 wwgz.cn
 xhww.net
 xiaocge.fun
@@ -245,6 +251,7 @@ yppan.com
 yydsys.cc
 yydsys.top
 yyxdmn.com
+yzzyimg.online
 zhenyunpan.com
 zhizhen1.top
 zhizhenpan.fun
