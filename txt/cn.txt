@@ -306,7 +306,6 @@ i2.hdslb.com
 m.youlai.cn
 i0.hdslb.com
 i1.hdslb.com
-t.me
 cdn5.telesco.pe
 www.pinglian.lol
 www.qwmp4.com
