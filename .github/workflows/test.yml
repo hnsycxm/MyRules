@@ -30,7 +30,10 @@ concurrency:
 
 jobs:
   Pytest:
-    runs-on: ubuntu-latest
+    # 固定到 24.04：ubuntu-latest 已滚动到 26.04，其 setup-python 工具缓存
+    # 不再提供 Python 3.9 预编译包（3.9 已 EOL），24.04 仍含 3.9.25。
+    # 见 actions/python-versions versions-manifest.json。
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
