@@ -42,10 +42,15 @@ jobs:
           python-version: '3.x'
           cache: 'pip'
 
-      # 安装 Python 依赖
+      # 安装 Python 依赖（构建 + 测试）
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      # 构建前先跑测试：脚本回归会直接拦下，不进入下载 mihomo 与编译阶段
+      - name: Run tests
+        run: |
+          pytest -q
 
       # 1. 获取 Mihomo 最新版本号
       - name: Get Mihomo Version
@@ -88,17 +93,23 @@ jobs:
           mihomo -v
 
       # 5. 执行项目逻辑脚本进行编译
+      #    STRICT_UNKNOWN=1：任何无法识别的规则类型都视为失败（当前 5 份清单已核验均为 0）
+      #    --prune：全部构建成功后删除 mrs/ 中已无对应 txt 源的过期 .mrs
       - name: Build Rules
         run: |
           chmod +x ./script/build-combined-rules.sh
-          ./script/build-combined-rules.sh
+          STRICT_UNKNOWN=1 ./script/build-combined-rules.sh --prune
 
-      # 6. 检测到文件改动时自动提交并推送（修改此处路径为 mrs/*.mrs）
+      # 6. 检测到文件改动时自动提交并推送
+      #    txt/ 是只读输入，构建从不修改它；git add -A mrs/ 同时暂存新增、修改与
+      #    --prune 删掉的过期产物（txt/*.txt 是冗余且会掩盖问题，已移除）。
+      #    注意：这里用默认的 GITHUB_TOKEN，其 push 不会触发新的 workflow；
+      #    若换成 PAT 会形成自触发循环，需另行加防护。
       - name: Commit Changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add mrs/*.mrs txt/*.txt
+          git add -A mrs/
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else

@@ -4,11 +4,19 @@
 
 # 规则处理设置
 rules:
-  # 是否启用子域名去重（保留父域名）
+  # 是否启用冗余归并（移除被其他规则完全覆盖的规则，如 +.example.com 覆盖 example.com）
+  # 注意：按 Mihomo 通配语义判定，公共后缀（如 co.jp）不会被当作可吸收的父域
   remove_subdomains: true
-  # 是否启用域名格式验证
+  # 是否启用域名格式验证；非法行会被跳过并在日志中列出
   validate_domains: true
-  # 是否按字母顺序排序
+  # 是否按主机排序输出域名
   sort_domains: true
-  # 构建脚本并行处理文件数
+  # 裸域名的解释方式（不带 +. / . / * 前缀、不带规则类型的条目）：
+  #   suffix（默认，历史行为）：example.com → +.example.com（匹配自身及所有子域）
+  #   exact（Mihomo 原生语义）：example.com 只匹配自身
+  # 说明：显式写法（+.x / .x / *.x / DOMAIN / DOMAIN-SUFFIX）不受此选项影响；
+  #       classify-rules.py 按本项产出显式写法，随后 sort-clash.py 固定以 --bare-domain exact
+  #       解释，避免裸域名被二次放宽。suffix 下写一个裸父域会归并掉同域所有子规则。
+  bare_domain: suffix
+  # 构建脚本并行处理文件数（1~32；非法值回退为 4 并告警）
   parallel_processes: 4

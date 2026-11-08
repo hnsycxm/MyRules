@@ -1,0 +1,2 @@
+# 仅本地开发与 CI 测试需要；构建脚本本身只依赖 requirements.txt（PyYAML）
+pytest>=7.0

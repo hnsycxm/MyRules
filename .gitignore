@@ -26,13 +26,20 @@ wheels/
 # Cache directory
 .cache/
 
-# 构建中间文件（与 script/build-combined-rules.sh 的 cleanup 保持一致）
-*_temp.txt
-*_ip.txt
-*_domain.txt
-*_Mihomo.txt
-version.txt
+# 构建/原子写入中间文件
+# 构建脚本的临时文件统一落在系统临时目录（mktemp -d，由 trap 自动清理），
+# 旧版散落在仓库内的中间文件规则已全部移除。仅保留真正可能出现的原子写入后缀：
+# install_mrs 的 *.tmp、write_lines_atomic 的 *.tmp.<pid>（仅就地运行清洗脚本时出现）。
 *.tmp
+*.tmp.*
+
+# pytest / 覆盖率缓存
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
 
 # IDE
 .vscode/

@@ -1,78 +1,114 @@
-#!/bin/bash
-# MyRules 构建脚本
+#!/usr/bin/env bash
+# MyRules 构建脚本（优化版）
 # 逐行分类文本清单，分别编译为 Mihomo（Clash Meta）二进制规则集，保存至 mrs/ 目录
 #
-# 与旧版的区别：
-#   1. 逐行分类（script/classify-rules.py），不再给整个文件打一个标签；
-#   2. 支持 IPv6 与 CIDR（标准库 ipaddress），不再只认识 IPv4；
-#   3. 不再用 2>/dev/null 掩盖 Python 报错；
-#   4. parallel_processes 会做合法性校验；
-#   5. 单个文件产出 0 条规则时直接失败，避免 CI 静默通过；
-#   6. 纯 IP 与纯域名仍沿用原来的文件名，混合清单才额外产出 *_domain.mrs。
+# 约定：
+#   - 纯 IP / 纯域名清单：产出 mrs/<name>.mrs
+#   - 混合清单：IP 部分为 mrs/<name>.mrs，域名部分为 mrs/<name>_domain.mrs
+#   - 每个清单先在独立临时目录中完整构建，全部成功后才写入 mrs/（全有或全无）
+#
+# 可选环境变量：
+#   MIHOMO_BIN=/path/to/mihomo   指定 mihomo 可执行文件
+#   STRICT_UNKNOWN=1             存在无法识别的行时视为失败（默认仅告警）
+#   NAMING=legacy|strict         命名方案（默认 legacy，等价于 --naming=...）
+#                                strict：始终产出 <name>_ip.mrs / <name>_domain.mrs，
+#                                避免清单内容变化时 <name>.mrs 在 ipcidr/domain 之间翻转
+#
+# 参数：
+#   --prune          构建全部成功后，删除 mrs/ 中不再对应任何 txt 的 .mrs
+#   --naming=MODE    同 NAMING
+#   -h, --help       显示帮助
 
 set -euo pipefail
 
-# 切换到脚本所在目录
-cd "$(cd "$(dirname "$0")" && pwd)" || exit 1
-PROJECT_ROOT="$(pwd)/.."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONFIG_FILE="$PROJECT_ROOT/config.yaml"
+TXT_DIR="$PROJECT_ROOT/txt"
 MRS_DIR="$PROJECT_ROOT/mrs"
 CLASSIFIER="$PROJECT_ROOT/script/classify-rules.py"
 SORT_SCRIPT="$PROJECT_ROOT/script/sort-clash.py"
-TASK_DIR=""
 
-log() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] $*"
-}
+WORK_DIR=""
+PYTHON_CMD=""
+MIHOMO_BIN="${MIHOMO_BIN:-}"
+STRICT_UNKNOWN="${STRICT_UNKNOWN:-0}"
+NAMING="${NAMING:-legacy}"
+PRUNE=0
+PARALLEL_PROCESSES=4
+TXT_FILES=()
+
+# Python 全程以 UTF-8 读写文本与输出日志，覆盖 load_config 的内联 python -c、
+# classify-rules.py、sort-clash.py 以及 xargs 派生出的子 shell。
+# 脚本自身也在入口调用 sort_clash.ensure_utf8_stdio()，两者叠加构成双重兜底：
+# 即使有人手动单独运行某个 Python 脚本、没设本变量，也不会在 GBK 等非 UTF-8
+# 控制台因打印中文/emoji 抛 UnicodeEncodeError 而误报构建失败。
+export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
+
+# ---------------------------------------------------------------- 日志
+timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
+
+# TASK_TAG 由 process_rules 以 local 方式设置（bash 动态作用域），用于在并行日志中区分任务
+log() { echo "$(timestamp) [INFO] ${TASK_TAG:-}$*"; }
 
 warn() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') [WARN] $*" >&2
+    echo "$(timestamp) [WARN] ${TASK_TAG:-}$*" >&2
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then echo "::warning::${TASK_TAG:-}$*"; fi
 }
 
 error() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] $*" >&2
+    echo "$(timestamp) [ERROR] ${TASK_TAG:-}$*" >&2
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then echo "::error::${TASK_TAG:-}$*"; fi
 }
 
+# ---------------------------------------------------------------- 退出清理
+# 只清理自己创建的临时目录；信号只负责转成正常 exit，由 EXIT trap 统一收尾（只执行一次）
 cleanup() {
-    log "检测到退出，正在清理临时文件..."
-    rm -f ./*_temp.txt ./*_Mihomo.txt ./*_ip.txt ./*_domain.txt version.txt
-    [ -n "$TASK_DIR" ] && rm -rf "$TASK_DIR" 2>/dev/null || true
-    return 0
+    local rc=$?
+    trap - EXIT
+    if [ -n "$WORK_DIR" ]; then rm -rf "$WORK_DIR"; fi
+    exit "$rc"
 }
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-trap cleanup EXIT INT TERM
-
-# 检查 Python 环境
-PYTHON_CMD=""
+# ---------------------------------------------------------------- 环境检查
 check_python() {
-    if command -v python3 &> /dev/null; then
-        PYTHON_CMD="python3"
-    elif command -v python &> /dev/null; then
-        PYTHON_CMD="python"
-    else
+    local c
+    for c in python3 python; do
+        if command -v "$c" > /dev/null 2>&1; then
+            PYTHON_CMD="$c"
+            break
+        fi
+    done
+    if [ -z "$PYTHON_CMD" ]; then
         error "未找到 Python，请先安装 Python 3.7+"
+        exit 1
+    fi
+    if ! "$PYTHON_CMD" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 7) else 1)'; then
+        error "Python 版本过低，需要 3.7+"
         exit 1
     fi
 }
 
-# 读取并行度配置，并校验它确实是一个正整数
-PARALLEL_PROCESSES=4
 load_config() {
     local configured=""
     if [ -f "$CONFIG_FILE" ]; then
-        # 这里刻意不加 2>/dev/null：YAML 解析失败需要让调用者看见
-        configured=$($PYTHON_CMD -c "
+        # 路径通过 argv 传入，避免拼进 Python 源码；报错不吞，直接让调用者看到
+        configured=$("$PYTHON_CMD" -c '
 import sys
-import yaml
 try:
-    with open('$CONFIG_FILE', 'r', encoding='utf-8') as f:
+    import yaml
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
         config = yaml.safe_load(f) or {}
+    rules = config.get("rules") or {}
+    print(rules.get("parallel_processes", 4))
 except Exception as exc:
-    print('读取配置文件失败: %s' % exc, file=sys.stderr)
+    print("读取配置文件失败: %s" % exc, file=sys.stderr)
     sys.exit(1)
-rules = config.get('rules') or {}
-print(rules.get('parallel_processes', 4))
-")
+' "$CONFIG_FILE") || { error "解析配置文件失败：$CONFIG_FILE"; exit 1; }
     else
         warn "配置文件不存在：$CONFIG_FILE，使用默认并行度"
     fi
@@ -80,230 +116,311 @@ print(rules.get('parallel_processes', 4))
     if [[ "$configured" =~ ^[1-9][0-9]*$ ]]; then
         PARALLEL_PROCESSES="$configured"
     else
-        warn "parallel_processes 配置无效（'$configured'），回退为 4"
+        if [ -n "$configured" ]; then warn "parallel_processes 配置无效（'$configured'），回退为 4"; fi
         PARALLEL_PROCESSES=4
     fi
 
-    # 避免误写成很大的数字把 CI runner 压垮
     if [ "$PARALLEL_PROCESSES" -gt 32 ]; then
         warn "parallel_processes=$PARALLEL_PROCESSES 过大，收敛为 32"
         PARALLEL_PROCESSES=32
     fi
-    log "并行进程数配置：$PARALLEL_PROCESSES"
 }
 
-TXT_DIR="$PROJECT_ROOT/txt"
-TXT_FILES=""
 get_txt_files() {
     if [ ! -d "$TXT_DIR" ]; then
         error "txt 目录不存在：$TXT_DIR"
         exit 1
     fi
+    # NUL 分隔 + 数组：文件名含空格也安全；LC_ALL=C 保证排序确定
+    local f
+    while IFS= read -r -d '' f; do
+        TXT_FILES+=("$f")
+    done < <(find "$TXT_DIR" -maxdepth 1 -type f -name '*.txt' -print0 | LC_ALL=C sort -z)
 
-    TXT_FILES=$(find "$TXT_DIR" -maxdepth 1 -name "*.txt" -type f 2>/dev/null | sort)
-
-    if [ -z "$TXT_FILES" ]; then
+    if [ "${#TXT_FILES[@]}" -eq 0 ]; then
         error "在 txt 目录下没有找到任何 .txt 文件"
         exit 1
     fi
 }
 
-# 寻找 Mihomo（本项目仅部署于 GitHub Actions，mihomo 由 CI 工作流负责安装）
-MIHOMO_BIN=""
 setup_mihomo_tool() {
-    if command -v mihomo &> /dev/null; then
+    if [ -n "$MIHOMO_BIN" ] && command -v "$MIHOMO_BIN" > /dev/null 2>&1; then
+        :
+    elif command -v mihomo > /dev/null 2>&1; then
         MIHOMO_BIN="mihomo"
-        log "检测到 mihomo，将直接使用"
-        return 0
+    else
+        error "未检测到 mihomo。本项目仅部署于 GitHub Actions（CI 会自动安装）；本地运行请先安装 mihomo 并加入 PATH，或设置 MIHOMO_BIN。"
+        exit 1
     fi
-
-    error "未检测到 mihomo。本项目仅部署于 GitHub Actions（CI 会自动安装 mihomo）；如需本地运行，请先自行安装 mihomo 并加入 PATH。"
-    exit 1
+    log "使用 mihomo：$(command -v "$MIHOMO_BIN")"
 }
 
-# 用 mihomo 编译一个规则集
+# ---------------------------------------------------------------- 核心处理
 compile_ruleset() {
-    local kind=$1
-    local source_txt=$2
-    local target_mrs=$3
-
+    local kind=$1 source_txt=$2 target_mrs=$3
     "$MIHOMO_BIN" convert-ruleset "$kind" text "$source_txt" "$target_mrs"
 }
 
-# 核心：逐行分类并编译单个规则集
-process_rules() {
-    local name=$1
-    local txt_file=$2
-    local ip_txt="${name}_ip.txt"
-    local domain_txt="${name}_domain.txt"
-    local mihomo_txt="${name}_Mihomo.txt"
-    local target_mrs="$MRS_DIR/${name}.mrs"
-    local domain_mrs="$MRS_DIR/${name}_domain.mrs"
+# 先复制为同目录临时文件再 mv，避免读者看到写了一半的 .mrs
+install_mrs() {
+    local src=$1 dst=$2
+    [ -s "$src" ] || return 1
+    cp -f "$src" "$dst.tmp" && mv -f "$dst.tmp" "$dst"
+}
 
-    log "开始处理规则: $name"
+# 注意：本函数在 `if ! process_rules` 中被调用，bash 会因此关闭其内部的 set -e，
+# 所以下面每一步都必须显式检查返回值。
+process_rules() {
+    local name=$1 txt_file=$2
+    local TASK_TAG="[$name] "
+    local work="$WORK_DIR/$name"
+    local ip_txt="$work/ip.txt" domain_txt="$work/domain.txt" mihomo_txt="$work/mihomo.txt"
+    local stage_ip="$work/ip.mrs" stage_domain="$work/domain.mrs"
+    local counts ip_count domain_count unknown_count
+
+    log "开始处理规则"
 
     if [ ! -f "$txt_file" ]; then
         error "输入文件不存在: $txt_file"
         return 1
     fi
+    mkdir -p "$work" || { error "无法创建临时目录：$work"; return 1; }
 
-    # 逐行分类：IP 与域名分别落盘，混合文件不会丢数据
-    local counts ip_count domain_count unknown_count
-    if ! counts=$($PYTHON_CMD "$CLASSIFIER" "$txt_file" "$ip_txt" "$domain_txt"); then
+    # 1) 逐行分类（classify-rules.py 输出三行：IP 数 / 域名数 / 无法识别数）
+    if ! counts=$("$PYTHON_CMD" "$CLASSIFIER" "$txt_file" "$ip_txt" "$domain_txt" --config "$CONFIG_FILE"); then
         error "规则分类失败：$txt_file"
         return 1
     fi
-    ip_count=$(printf '%s\n' "$counts" | sed -n '1p')
-    domain_count=$(printf '%s\n' "$counts" | sed -n '2p')
-    unknown_count=$(printf '%s\n' "$counts" | sed -n '3p')
-    : "${ip_count:=0}" "${domain_count:=0}" "${unknown_count:=0}"
-
-    log "  IP 条目：$ip_count；域名条目：$domain_count；无法识别：$unknown_count"
-    if [ "$unknown_count" -gt 0 ]; then
-        warn "$name：有 $unknown_count 行既不是 IP 也不是域名，已忽略"
-    fi
-
-    if [ "$ip_count" -eq 0 ] && [ "$domain_count" -eq 0 ]; then
-        error "$name：清洗后没有任何有效规则，拒绝生成空的 .mrs"
+    { read -r ip_count || true; read -r domain_count || true; read -r unknown_count || true; } <<< "$counts"
+    ip_count=${ip_count:-0}
+    domain_count=${domain_count:-0}
+    unknown_count=${unknown_count:-0}
+    if ! [[ $ip_count =~ ^[0-9]+$ && $domain_count =~ ^[0-9]+$ && $unknown_count =~ ^[0-9]+$ ]]; then
+        error "分类脚本输出异常（期望三个整数）：$counts"
         return 1
     fi
 
-    # 域名条目先清洗（去重/子域归并/排序），IP 条目已在分类阶段规范化
-    if [ "$domain_count" -gt 0 ]; then
-        cp "$domain_txt" "${name}_temp.txt"
-        if ! $PYTHON_CMD "$SORT_SCRIPT" "${name}_temp.txt" --config "$CONFIG_FILE"; then
-            error "Python 脚本执行失败：sort-clash.py ($name)"
+    if [ "$unknown_count" -gt 0 ]; then
+        if [ "$STRICT_UNKNOWN" = "1" ]; then
+            error "有 $unknown_count 行既不是 IP 也不是域名（STRICT_UNKNOWN=1）"
             return 1
         fi
-        if [ ! -s "${name}_temp.txt" ]; then
+        warn "有 $unknown_count 行既不是 IP 也不是域名，已忽略"
+    fi
+
+    # 2) 域名清洗（去重/冗余归并/排序）；之后以清洗后的真实行数为准
+    #    分类阶段已把每条规则写成显式的 Mihomo 写法（+.x / .x / *.x / 精确 x），
+    #    因此这里必须按 exact 解释，不能再让裸域名二次变成后缀。
+    if [ "$domain_count" -gt 0 ]; then
+        if ! "$PYTHON_CMD" "$SORT_SCRIPT" "$domain_txt" --config "$CONFIG_FILE" --bare-domain exact; then
+            error "sort-clash.py 执行失败"
+            return 1
+        fi
+        domain_count=$(awk 'NF{n++} END{print n+0}' "$domain_txt") || return 1
+        if [ "$domain_count" -eq 0 ]; then
             if [ "$ip_count" -gt 0 ]; then
-                warn "$name：域名部分清洗后为空，只生成 IP 规则集"
-                domain_count=0
-            else
-                error "$name：域名清洗后为空，拒绝生成空的 .mrs"
-                return 1
+                warn "域名部分清洗后为空，只生成 IP 规则集"
             fi
         fi
     fi
-
-    if [ "$ip_count" -gt 0 ] && [ "$domain_count" -gt 0 ]; then
-        # 混合清单：同一份清单不能塞进一个 mrs（ipcidr 与 domain 是两种格式），
-        # 因此主产物沿用原名，域名部分另外产出一个 *_domain.mrs
-        log "  $name 为混合清单：域名部分将额外编译为 ${name}_domain.mrs"
-    fi
-
-    local failed=0
-
-    # 1) 有 IP 就产出 IP 规则集
     if [ "$ip_count" -gt 0 ]; then
-        if compile_ruleset ipcidr "$ip_txt" "$target_mrs"; then
-            log "✅ 已生成 IP 规则集：$target_mrs（$ip_count 条）"
-        else
-            error "生成 IP 规则集失败：$target_mrs"
-            failed=1
-        fi
+        ip_count=$(awk 'NF{n++} END{print n+0}' "$ip_txt") || return 1
     fi
 
-    # 2) 有域名就产出域名规则集
+    if [ "$ip_count" -eq 0 ] && [ "$domain_count" -eq 0 ]; then
+        error "清洗后没有任何有效规则，拒绝生成空的 .mrs"
+        return 1
+    fi
+    log "IP：$ip_count 条；域名：$domain_count 条"
+
+    # 3) 规划产物。legacy 沿用原命名；strict 固定使用 _ip / _domain 后缀
+    local -a out_src=() out_dst=()
+    if [ "$NAMING" = "strict" ]; then
+        if [ "$ip_count" -gt 0 ]; then out_src+=("$stage_ip"); out_dst+=("${name}_ip.mrs"); fi
+        if [ "$domain_count" -gt 0 ]; then out_src+=("$stage_domain"); out_dst+=("${name}_domain.mrs"); fi
+    elif [ "$ip_count" -gt 0 ] && [ "$domain_count" -gt 0 ]; then
+        out_src=("$stage_ip" "$stage_domain")
+        out_dst=("${name}.mrs" "${name}_domain.mrs")
+        log "混合清单：IP → ${name}.mrs，域名 → ${name}_domain.mrs"
+    elif [ "$ip_count" -gt 0 ]; then
+        out_src=("$stage_ip"); out_dst=("${name}.mrs")
+    else
+        out_src=("$stage_domain"); out_dst=("${name}.mrs")
+    fi
+
+    # 产物名若恰好是另一份清单的主产物名，则视为命名冲突
+    local i base
+    for i in "${!out_dst[@]}"; do
+        base="${out_dst[$i]%.mrs}"
+        if [ "$base" != "$name" ] && [ -e "$TXT_DIR/$base.txt" ]; then
+            error "命名冲突：将产出 ${out_dst[$i]}，但 txt/$base.txt 也存在"
+            return 1
+        fi
+    done
+
+    # 4) 编译到临时目录（任何一步失败都不会动 mrs/ 下的现有文件）
+    if [ "$ip_count" -gt 0 ]; then
+        compile_ruleset ipcidr "$ip_txt" "$stage_ip" || { error "编译 IP 规则集失败"; return 1; }
+    fi
     if [ "$domain_count" -gt 0 ]; then
-        local domain_target="$target_mrs"
-        if [ "$ip_count" -gt 0 ]; then
-            domain_target="$domain_mrs"
-        fi
-        sed "s/^/\\+\\./g" "${name}_temp.txt" > "$mihomo_txt"
-        if compile_ruleset domain "$mihomo_txt" "$domain_target"; then
-            log "✅ 已生成域名规则集：$domain_target（$domain_count 条）"
-        else
-            error "生成域名规则集失败：$domain_target"
-            failed=1
-        fi
+        # 规则已是 Mihomo domain 规则集的写法，必须原样交给 mihomo，不能再加前缀，
+        # 否则 *.x（一级子域）、.x（仅子域）、精确匹配的语义都会被改写。
+        # 这里只做防御性清理：去 CR、去空行。
+        sed -e 's/\r$//' -e '/^[[:space:]]*$/d' "$domain_txt" > "$mihomo_txt" \
+            || { error "生成 Mihomo 文本失败"; return 1; }
+        compile_ruleset domain "$mihomo_txt" "$stage_domain" || { error "编译域名规则集失败"; return 1; }
     fi
 
-    return "$failed"
+    # 5) 全部成功后再落盘
+    for i in "${!out_dst[@]}"; do
+        install_mrs "${out_src[$i]}" "$MRS_DIR/${out_dst[$i]}" || { error "写入 ${out_dst[$i]} 失败"; return 1; }
+    done
+
+    # 6) 清理该清单旧版本遗留的产物（不碰属于其他清单的文件）
+    local cand d keep
+    for cand in "$name" "${name}_ip" "${name}_domain"; do
+        keep=0
+        for d in "${out_dst[@]}"; do
+            if [ "$d" = "$cand.mrs" ]; then keep=1; fi
+        done
+        if [ "$keep" -eq 1 ]; then continue; fi
+        if [ "$cand" != "$name" ] && [ -e "$TXT_DIR/$cand.txt" ]; then continue; fi
+        rm -f "$MRS_DIR/$cand.mrs"
+    done
+
+    # 7) 记录结果，供汇总与 --prune 使用
+    printf '%s\n' "${out_dst[@]}" > "$WORK_DIR/result/$name.out" || return 1
+    printf '%s\t%s\t%s\t%s\n' "$name" "$ip_count" "$domain_count" "${out_dst[*]}" \
+        > "$WORK_DIR/result/$name.sum" || return 1
+
+    log "✅ 完成"
 }
 
-export -f process_rules compile_ruleset log warn error
-# 并行 worker 需要的变量必须显式导出（xargs 会在子 shell 中调用 process_rules）
-export PYTHON_CMD PROJECT_ROOT MRS_DIR MIHOMO_BIN CONFIG_FILE
-export CLASSIFIER SORT_SCRIPT TASK_DIR PARALLEL_PROCESSES
+# 单个任务入口：失败时留下标记文件，供汇总报告
+run_one() {
+    local txt_file=$1 filename name
+    filename=$(basename "$txt_file")
+    name="${filename%.txt}"
+    if ! process_rules "$name" "$txt_file"; then
+        : > "$WORK_DIR/failed/$name"
+        return 1
+    fi
+}
 
-# 处理全部任务；PARALLEL_PROCESSES > 1 时用 xargs 并行，否则串行。
-# 两种模式下子任务失败都会返回非 0，从而让 CI 变红。
+export -f timestamp log warn error compile_ruleset install_mrs process_rules run_one
+export PYTHON_CMD MIHOMO_BIN CONFIG_FILE TXT_DIR MRS_DIR CLASSIFIER SORT_SCRIPT STRICT_UNKNOWN NAMING
+
+# 统一用 xargs 调度；并行度为 1 时即串行。某个任务失败不会中断其余任务。
 run_tasks() {
-    local status=0
-    if [ "$PARALLEL_PROCESSES" -gt 1 ] && command -v xargs &> /dev/null; then
-        log "使用 xargs 并行处理（-$PARALLEL_PROCESSES）"
-        status=0
-        find "$TASK_DIR" -name 'task_*.txt' -print0 |
-            xargs -0 -P "$PARALLEL_PROCESSES" -I {} bash -c '
-                task_file="$1"
-                IFS="|" read -r name txt_file < "$task_file"
-                if process_rules "$name" "$txt_file"; then
-                    exit 0
-                fi
-                echo "$task_file" >> "$TASK_DIR/failed.txt"
-                exit 1
-            ' _ {} ||
-            status=1
-    else
-        log "串行处理（并行度 $PARALLEL_PROCESSES）"
-        local task_file name txt_file
-        for task_file in "$TASK_DIR"/task_*.txt; do
-            IFS="|" read -r name txt_file < "$task_file"
-            process_rules "$name" "$txt_file" || status=1
-        done
-    fi
+    local total=${#TXT_FILES[@]} workers=$PARALLEL_PROCESSES
+    if [ "$workers" -gt "$total" ]; then workers=$total; fi
+    log "共 $total 个规则文件，并行度 $workers"
 
-    # xargs 在 -P 模式下可能只回传聚合状态，这里再核对一次失败清单
-    if [ "$status" -eq 0 ] && [ -f "$TASK_DIR/failed.txt" ]; then
-        status=1
+    mkdir -p "$WORK_DIR/failed" "$WORK_DIR/result"
+    local xargs_rc=0
+    printf '%s\0' "${TXT_FILES[@]}" |
+        xargs -0 -n1 -P "$workers" bash -c 'set -u; run_one "$1"' _ || xargs_rc=$?
+
+    local f failed=()
+    for f in "$WORK_DIR"/failed/*; do
+        [ -e "$f" ] && failed+=("$(basename "$f")")
+    done
+
+    if [ "${#failed[@]}" -gt 0 ]; then
+        error "以下规则集构建失败：${failed[*]}"
+        return 1
     fi
-    return "$status"
+    if [ "$xargs_rc" -ne 0 ]; then
+        error "并行调度异常退出（xargs 返回 $xargs_rc）"
+        return 1
+    fi
+}
+
+usage() {
+    sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'
+}
+
+parse_args() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --prune) PRUNE=1 ;;
+            --naming=*) NAMING="${1#*=}" ;;
+            -h | --help) usage; exit 0 ;;
+            *) error "未知参数：$1"; usage >&2; exit 2 ;;
+        esac
+        shift
+    done
+    case "$NAMING" in
+        legacy | strict) ;;
+        *) error "NAMING 只能是 legacy 或 strict，当前：$NAMING"; exit 2 ;;
+    esac
+}
+
+print_summary() {
+    local f name ip dom outs
+    local md="${GITHUB_STEP_SUMMARY:-}"
+    log "构建汇总："
+    printf '  %-24s %8s %8s  %s\n' "清单" "IP" "域名" "产物"
+    if [ -n "$md" ]; then
+        printf '### MyRules 构建汇总\n\n| 清单 | IP | 域名 | 产物 |\n|---|---:|---:|---|\n' >> "$md"
+    fi
+    for f in "$WORK_DIR"/result/*.sum; do
+        [ -e "$f" ] || continue
+        IFS=$'\t' read -r name ip dom outs < "$f"
+        printf '  %-24s %8s %8s  %s\n' "$name" "$ip" "$dom" "$outs"
+        if [ -n "$md" ]; then printf '| %s | %s | %s | %s |\n' "$name" "$ip" "$dom" "$outs" >> "$md"; fi
+    done
+}
+
+# 仅在全部任务成功后调用：删除 mrs/ 中不在本次产物清单里的 .mrs
+prune_stale() {
+    local expected="$WORK_DIR/expected.txt" f base
+    cat "$WORK_DIR"/result/*.out | LC_ALL=C sort -u > "$expected"
+    for f in "$MRS_DIR"/*.mrs; do
+        [ -e "$f" ] || continue
+        base=$(basename "$f")
+        if ! grep -qxF -- "$base" "$expected"; then
+            rm -f "$f"
+            log "🧹 已删除过期规则集：$base"
+        fi
+    done
 }
 
 main() {
+    parse_args "$@"
     log "========================================"
-    log "MyRules 构建开始"
+    log "MyRules 构建开始（命名方案：$NAMING）"
     log "========================================"
 
     check_python
     load_config
+    log "并行进程数配置：$PARALLEL_PROCESSES"
     get_txt_files
     setup_mihomo_tool
+    export MIHOMO_BIN
 
-    if [ ! -f "$CLASSIFIER" ]; then
-        error "缺少规则分类脚本：$CLASSIFIER"
-        exit 1
-    fi
-    if [ ! -f "$SORT_SCRIPT" ]; then
-        error "缺少域名清洗脚本：$SORT_SCRIPT"
-        exit 1
-    fi
-
-    # 确保根目录下 mrs 文件夹存在
-    mkdir -p "$MRS_DIR"
-
-    TASK_DIR=$(mktemp -d)
-    export TASK_DIR
-
-    local txt_file filename name
-    for txt_file in $TXT_FILES; do
-        filename=$(basename "$txt_file")
-        name="${filename%.*}"
-        printf '%s|%s\n' "$name" "$txt_file" > "$TASK_DIR/task_${name}.txt"
+    local f
+    for f in "$CLASSIFIER" "$SORT_SCRIPT"; do
+        if [ ! -f "$f" ]; then
+            error "缺少脚本：$f"
+            exit 1
+        fi
     done
 
-    local file_count
-    file_count=$(find "$TASK_DIR" -name 'task_*.txt' | wc -l | tr -d ' ')
-    log "共 $file_count 个规则文件待处理"
+    mkdir -p "$MRS_DIR"
+    WORK_DIR=$(mktemp -d)
+    export WORK_DIR
 
     if ! run_tasks; then
-        error "构建失败：至少有一个规则文件处理出错，详见上方日志"
+        error "构建失败：详见上方日志"
         exit 1
     fi
 
+    print_summary
+    if [ "$PRUNE" -eq 1 ]; then prune_stale; fi
+
     log "========================================"
-    log "✅ 所有规则处理完成！"
+    log "✅ 所有规则处理完成！mrs 目录共 $(find "$MRS_DIR" -maxdepth 1 -name '*.mrs' | wc -l | tr -d ' ') 个规则集"
     log "========================================"
 }
 
