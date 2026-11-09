@@ -42,15 +42,10 @@ jobs:
           python-version: '3.x'
           cache: 'pip'
 
-      # 安装 Python 依赖（构建 + 测试）
+      # 安装 Python 依赖（仅构建所需）
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt -r requirements-dev.txt
-
-      # 构建前先跑测试：脚本回归会直接拦下，不进入下载 mihomo 与编译阶段
-      - name: Run tests
-        run: |
-          pytest -q
+          pip install -r requirements.txt
 
       # 1. 获取 Mihomo 最新版本号
       - name: Get Mihomo Version

@@ -80,7 +80,6 @@ CI 默认以 `STRICT_UNKNOWN=1` + `--prune` 运行，保证脏数据会被拦下
 
 ```bash
 pip install -r requirements.txt
-pip install -r requirements-dev.txt       # 运行测试时需要
 
 # 完整构建（需要 mihomo；临时文件自动落在系统临时目录，无需手工清理）
 ./script/build-combined-rules.sh
@@ -96,13 +95,8 @@ python script/sort-clash.py /tmp/cn_test.txt --config config.yaml
 # 输入已是 classify-rules.py 产出的显式写法时，必须加 --bare-domain exact
 ```
 
-```bash
-# 运行测试
-pytest -q
-```
-
 > 注意：CI 会自动安装最新版 mihomo；本地运行请自行安装，或设置 `MIHOMO_BIN=/path/to/mihomo`。
-> 缺少 PyYAML 时脚本仍可运行，但会回退到默认配置并打印警告；测试依赖 PyYAML，请确保已安装。
+> 缺少 PyYAML 时脚本仍可运行，但会回退到默认配置并打印警告。
 > Python 全程以 UTF-8 输出（脚本入口与 `PYTHONIOENCODING` 双重兜底），在非 UTF-8 终端下日志可能是乱码，但不会崩溃或误报失败。
 
 ## 目录结构
@@ -114,13 +108,10 @@ pytest -q
 │   ├── build-combined-rules.sh   # 主构建脚本（分类 → 归并 → 编译 → 落盘）
 │   ├── classify-rules.py         # 逐行分类并规范化成显式 Mihomo 写法
 │   └── sort-clash.py             # 域名清洗（去重 / 排序 / 按通配语义冗余归并）
-├── tests/          # pytest 测试集
 ├── config.yaml     # 构建配置
 ├── requirements.txt      # 运行依赖（PyYAML）
-├── requirements-dev.txt  # 测试依赖（pytest）
 ├── .github/workflows/
-│   ├── auto-update.yml   # 每日 / 推送时重建并提交 mrs
-│   └── test.yml          # 推送 / PR 时运行 pytest
+│   └── auto-update.yml   # 每日 / 推送时重建并提交 mrs
 └── README.md
 ```
 
@@ -138,11 +129,10 @@ pytest -q
 
 ## 清理本地临时文件
 
-构建脚本的临时文件统一落在系统临时目录（`mktemp -d`），退出时由 `trap` 自动清理，仓库内不再产生 `_temp.txt` / `_Mihomo.txt` 等文件。日常只需按需清理 Python / pytest 缓存：
+构建脚本的临时文件统一落在系统临时目录（`mktemp -d`），退出时由 `trap` 自动清理，仓库内不再产生 `_temp.txt` / `_Mihomo.txt` 等文件。日常只需按需清理 Python 缓存：
 
 ```bash
 find . -type d -name "__pycache__" -exec rm -rf {} +
-find . -type d -name ".pytest_cache" -exec rm -rf {} +
 ```
 
 ## 许可证

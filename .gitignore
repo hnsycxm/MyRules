@@ -33,14 +33,6 @@ wheels/
 *.tmp
 *.tmp.*
 
-# pytest / 覆盖率缓存
-.pytest_cache/
-.coverage
-.coverage.*
-htmlcov/
-.tox/
-.nox/
-
 # IDE
 .vscode/
 .idea/
